@@ -3043,7 +3043,7 @@ function openEvidence(alert) {
     const loc = alertLocation(alert);
     const nav = navigateUrl(loc);
     document.getElementById("modalLocation").innerHTML = loc.label
-        ? `&#128205; ${escapeHTML(loc.label)}${alert.camera_code ? ` (${escapeHTML(alert.camera_code)})` : ""}` +
+        ? `&#128205; ${escapeHTML(placeWithCode(loc.label, alert.camera_code))}` +
           (nav ? ` &middot; <a class="nav-link" href="${nav}" target="_blank" rel="noopener">NAVIGATE</a>` : "")
         : "";
 
@@ -3911,6 +3911,13 @@ function navigateUrl(loc) {
         ? `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}` : null;
 }
 
+// "Main Gate (CAM-02)", or just "CAM-01" when the place is the code itself.
+function placeWithCode(place, code) {
+    const p = (place || "").trim();
+    if (!code) return p;
+    return !p || p.toUpperCase() === code.toUpperCase() ? code : `${p} (${code})`;
+}
+
 // "CAM-01" when the camera has no name of its own, else "CAM-02 Main Gate".
 function camTitle(cam) {
     if (!cam) return "";
@@ -4696,7 +4703,7 @@ async function openSubject(result) {
     const zones = result.zones_visited?.length ? result.zones_visited.join(", ") : "-";
     document.getElementById("subjectFacts").innerHTML = `
         <div><span>MATCH</span>${result.match != null ? result.match + "%" : "-"}</div>
-        <div><span>CAMERAS SEEN</span>${escapeHTML(result.cameras_seen.map(c => `${c.place} (${c.code})`).join(", "))}</div>
+        <div><span>CAMERAS SEEN</span>${escapeHTML(result.cameras_seen.map(c => placeWithCode(c.place, c.code)).join(", "))}</div>
         <div><span>ZONES</span>${escapeHTML(zones)}</div>
         <div><span>FIRST SEEN</span>${hhmmss(result.first_seen)}</div>
         <div><span>LAST SEEN</span>${hhmmss(result.last_seen)}</div>
@@ -4715,7 +4722,7 @@ function sightingsHTML(route) {
     return route.map(r => `
         <div class="sighting">
             ${r.thumb_url ? `<img src="${r.thumb_url}" alt="">` : "<span></span>"}
-            <div><b>${escapeHTML(r.place)} (${escapeHTML(r.code)})</b><br>
+            <div><b>${escapeHTML(placeWithCode(r.place, r.code))}</b><br>
                 <small>in ${hhmmss(r.time_in)} &middot; out ${r.time_out ? hhmmss(r.time_out) : "still visible"}${r.exit_edge ? " &middot; left " + escapeHTML(r.exit_edge) : ""}</small></div>
             ${r.reid_confidence ? `<span class="reid-badge">re-ID ${Math.round(r.reid_confidence * 100)}%</span>` : "<span></span>"}
         </div>`).join("");
@@ -4747,7 +4754,7 @@ function renderFollowBanner() {
         return;
     }
     const f = following[0];
-    const where = f.camera ? `${f.visible ? "on" : "last seen on"} ${f.camera.place} (${f.camera.code}) ${f.visible ? "" : "at " + hhmmss(f.last_seen)}` : "not seen yet";
+    const where = f.camera ? `${f.visible ? "on" : "last seen on"} ${placeWithCode(f.camera.place, f.camera.code)} ${f.visible ? "" : "at " + hhmmss(f.last_seen)}` : "not seen yet";
     document.getElementById("followText").textContent =
         `FOLLOWING #${f.global_id} - ${where}${following.length > 1 ? ` (+${following.length - 1} more)` : ""}`;
     banner.dataset.gid = f.global_id;
