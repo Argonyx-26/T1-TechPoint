@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Locate {{CODE}}</title>
+<style>
+    :root { --bg: #111A19; --panel: #1a2624; --text: #e8efe6; --muted: #9aa99a; --khaki: #F8D794; --ok: #7fd18b; --bad: #ef5a3a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+    .kicker { color: var(--khaki); font-size: 12px; letter-spacing: .12em; }
+    h1 { margin: 4px 0 2px; font-size: 26px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .card { background: var(--panel); border-radius: 10px; padding: 16px; margin-top: 16px; }
+    button { width: 100%; padding: 14px; border: 0; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .primary { background: var(--khaki); color: #111A19; }
+    .secondary { background: #2b3a37; color: var(--text); margin-top: 10px; }
+    button:disabled { opacity: .5; }
+    .big { font-size: 34px; font-weight: 800; margin: 6px 0; font-variant-numeric: tabular-nums; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--khaki); }
+    input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #3a4a46; background: #0d1413; color: var(--text); font-size: 16px; }
+    ol { padding-left: 20px; margin: 8px 0; } li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+    <div class="kicker">VIGIL &middot; CAMERA LOCATION</div>
+    <h1>{{CODE}}</h1>
+    <div class="muted">{{NAME}}: stand right next to this camera, outdoors or by a window, then tap the button.</div>
+
+    <div class="card">
+        <button class="primary" id="gpsBtn">USE PHONE GPS</button>
+        <div class="big" id="acc">&nbsp;</div>
+        <div id="msg" class="muted">GPS gets more accurate over 10-30 seconds. The camera is placed automatically once the fix is within 20 m.</div>
+        <button class="secondary" id="sendBtn" disabled>SEND CURRENT FIX NOW</button>
+    </div>
+
+    <div class="card">
+        <b>No GPS prompt?</b>
+        <ol class="muted">
+            <li>Open this link as <b>https://</b> (the QR code does) and tap <i>Advanced &rarr; Proceed</i> on the certificate warning.</li>
+            <li>Or: in Google Maps long-press where the camera is, copy the coordinates, paste them here:</li>
+        </ol>
+        <input id="manual" placeholder="19.119700, 72.846500" inputmode="decimal">
+        <button class="secondary" id="manualBtn">SEND THESE COORDINATES</button>
+    </div>
+</main>
+<script>
+const CODE = "{{CODE}}";
+const KEY = new URLSearchParams(location.search).get("k") || "";
+const GOOD_M = 20, WAIT_S = 30, OK_AFTER_WAIT_M = 100;
+const $ = id => document.getElementById(id);
+let best = null, watch = null, started = 0, sent = false;
+
+function fmt(m) { return m >= 1000 ? `±${(m / 1000).toFixed(1)} km` : `±${Math.round(m)} m`; }
+function say(text, cls = "muted") { $("msg").className = cls; $("msg").textContent = text; }
+
+async function send(lat, lng, accuracy) {
+    try {
+        const r = await fetch(`/api/locate/${encodeURIComponent(CODE)}`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat, lng, accuracy, k: KEY })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+        sent = true;
+        say(`${data.message}. ${CODE} is now on the map - you can close this page.`, "ok");
+    } catch (e) {
+        say(`Not sent: ${e.message}`, "bad");
+    }
+}
+
+function stop() { if (watch !== null) navigator.geolocation.clearWatch(watch); watch = null; }
+
+$("gpsBtn").addEventListener("click", () => {
+    if (!window.isSecureContext || !navigator.geolocation) {
+        say("This page is not secure (http://), so the phone will not share GPS. Use the https:// link from the QR code, or paste coordinates below.", "bad");
+        return;
+    }
+    best = null; sent = false; started = Date.now();
+    say("Waiting for GPS...", "warn");
+    stop();
+    watch = navigator.geolocation.watchPosition(pos => {
+        const c = pos.coords;
+        if (!best || c.accuracy < best.accuracy) best = { lat: c.latitude, lng: c.longitude, accuracy: c.accuracy };
+        $("acc").textContent = fmt(best.accuracy);
+        $("acc").className = "big " + (best.accuracy <= GOOD_M ? "ok" : best.accuracy <= OK_AFTER_WAIT_M ? "warn" : "bad");
+        $("sendBtn").disabled = false;
+        const waited = (Date.now() - started) / 1000;
+        if (sent) return;
+        if (best.accuracy <= GOOD_M || (waited >= WAIT_S && best.accuracy <= OK_AFTER_WAIT_M)) {
+            stop();
+            send(best.lat, best.lng, best.accuracy);
+        } else {
+            say(`Improving... best so far ${fmt(best.accuracy)} (${Math.round(waited)} s). Step outside or near a window if it stays high.`, "warn");
+        }
+    }, err => {
+        say(err.code === 1 ? "Location permission denied - allow it in the browser's site settings and try again."
+                           : `GPS error: ${err.message}`, "bad");
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 });
+});
+
+$("sendBtn").addEventListener("click", () => { if (best) { stop(); send(best.lat, best.lng, best.accuracy); } });
+
+$("manualBtn").addEventListener("click", () => {
+    const m = $("manual").value.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+    if (!m) { say("Paste coordinates like 19.119700, 72.846500", "bad"); return; }
+    send(Number(m[1]), Number(m[2]), null);
+});
+</script>
+</body>
+</html>

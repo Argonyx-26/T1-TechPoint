@@ -25,7 +25,8 @@ from backend.cameras import (
     Camera,
     CameraLimitError,
 )
-from backend import features
+from backend import features, geo
+from backend.locate import router as locate_router, start_https_server
 from backend.phones import discover, test_source
 from backend.search import SearchRefused
 from backend.zones import Zone
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
     # cameras are restored STOPPED and the analyst starts what they need.
     audit("SERVER_START", f"device {config.DEVICE}, weapon model {config.WEAPON_MODEL_PATH.name}, "
                           f"{len(app_state.manager.cameras)} saved camera(s) restored stopped")
+    app.state.locate_base = start_https_server()
     yield
     app_state.stop()
     audit("SERVER_STOP", "shutdown")
@@ -46,6 +48,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Vigil Threat Detection & Situational Awareness", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.include_router(locate_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -592,7 +595,62 @@ def delete_link(link_id: str):
 @app.patch("/api/cameras/{cam_id}")
 def patch_camera(cam_id: str, body: CameraPatch):
     _camera_or_404(cam_id)
-    return app_state.manager.update(cam_id, name=body.name, location=body.location).to_dict()
+    try:
+        return app_state.manager.update(cam_id, name=body.name, location=body.location).to_dict()
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Bad location: {exc}")
+
+
+# ---------- location: site, address search, phone-GPS locate links ----------
+@app.get("/api/site")
+def get_site():
+    return {"site": app_state.manager.site}
+
+
+class SiteIn(BaseModel):
+    lat: float
+    lng: float
+    label: str = ""
+    zoom: Optional[int] = None
+    accuracy_m: Optional[float] = None
+    source: str = ""
+
+
+@app.put("/api/site")
+def put_site(body: SiteIn):
+    try:
+        return {"site": app_state.manager.set_site(body.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/site")
+def delete_site():
+    return {"site": app_state.manager.set_site(None)}
+
+
+@app.get("/api/geocode")
+def geocode(q: str, limit: int = 5):
+    """Address / place search via OpenStreetMap Nominatim (proxied: proper
+    User-Agent, max 1 request/s, cached)."""
+    try:
+        return {"results": geo.geocode(q, limit=max(1, min(limit, 10))),
+                "attribution": "Search by OpenStreetMap Nominatim, data (c) OpenStreetMap contributors (ODbL)"}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Address search unavailable (needs internet): {exc}")
+
+
+@app.get("/api/cameras/{cam_id}/locate")
+def camera_locate_link(cam_id: str):
+    """The phone-GPS link for this camera, on the laptop's LAN IP (never
+    127.0.0.1), plus its QR code as inline SVG."""
+    camera = _camera_or_404(cam_id)
+    ip = geo.lan_ip()
+    url = geo.locate_url(camera.code, camera.id, ip)
+    if url is None:
+        raise HTTPException(status_code=503, detail="No network: connect the laptop to the phone's Wi-Fi/hotspot first")
+    return {"url": url, "lan_ip": ip, "https": bool(getattr(app.state, "locate_base", None)),
+            "qr_svg": geo.qr_svg(url)}
 
 
 @app.delete("/api/cameras/{cam_id}")

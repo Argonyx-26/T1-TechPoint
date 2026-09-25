@@ -217,6 +217,36 @@ two crowd clips) on an RTX 3050: old dashboard 7.9 -> 4.0 fps when opened,
 now 7.9 -> 7.8. If fps is still short, the analytics modules panel shows
 per-camera fps; search (CLIP) and pose are the optional costs.
 
+### Putting cameras on the map (accurately)
+
+A laptop's "Use my location" over a phone hotspot is IP / Wi-Fi based and can
+be kilometres off, so the dashboard never trusts a fix worse than 200 m: it
+shows the accuracy circle and says "Approximate location (±X km) - search
+your address, drag the pin, or use phone GPS". Better ways, best first:
+
+1. **Phone GPS.** Each camera tile has a **GPS** button (also in the location
+   editor) showing a QR code for `https://<laptop LAN ip>:8443/locate/CAM-02?k=...`.
+   Stand next to the camera, scan it with a phone on the same Wi-Fi / hotspot,
+   tap *Advanced -> Proceed* on the certificate warning, allow location. The
+   camera is placed once GPS is within 20 m ("Located via phone GPS ±8 m")
+   and the dashboard flies there. Phones only give GPS to HTTPS pages, so the
+   server also listens on port 8443 with a self-signed certificate for the
+   LAN IP (`data/tls/`, re-issued when the IP changes); that port serves only
+   the locate page and its POST, nothing else. Change it with
+   `ARGONYX_LOCATE_PORT` (0 turns it off). Windows may ask once to allow
+   Python through the firewall: allow it on private networks.
+2. **Search.** STREET MAP -> type an address or place ("Andheri Station,
+   Mumbai") -> pick a result. Uses OpenStreetMap Nominatim through the
+   backend (proper User-Agent, max 1 request/s, cached; set
+   `ARGONYX_NOMINATIM_CONTACT` to add your contact to the User-Agent).
+3. **Drag.** Every pin on the street map is draggable; it saves on drop.
+
+**SET SITE HERE** stores the site in `data/cameras.json`; the map then opens
+on the placed cameras (or the site when none are placed yet), never on a
+guessed city. A new alert flies the map to its camera and opens the popup;
+NAVIGATE opens Google Maps directions to that exact point. The layer button
+(top right) switches to **Satellite** (Esri World Imagery).
+
 From the dashboard you can:
 
 - Switch between webcam, an uploaded file, or a bundled sample clip.

@@ -7,3 +7,5 @@ ultralytics==8.3.40
 pydantic==2.9.2
 lapx>=0.5.2   # ByteTrack association (ultralytics tracker); without it every frame errors
 open_clip_torch==3.3.0   # Ask Vigil search + re-ID (weights cached in models/clip)
+segno==1.6.6            # QR codes for the phone-GPS locate links
+cryptography==50.0.1    # self-signed HTTPS cert for the locate page (phones give GPS only to HTTPS)

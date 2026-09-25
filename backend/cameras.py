@@ -28,6 +28,7 @@ from backend.alerts.manager import AlertManager
 from backend.audit import audit
 from backend.detection.object_detector import Detection
 from backend.detection.weapon_detector import WeaponDetector
+from backend.geo import normalize_latlng
 from backend.pipeline import FramePipeline
 from backend.zones import ZoneStore
 
@@ -333,16 +334,21 @@ class Location:
     x: Optional[float] = None   # site-plan position, normalized 0-1
     y: Optional[float] = None
     heading: Optional[float] = None  # view direction on the site plan, degrees
+    accuracy_m: Optional[float] = None  # GPS / browser fix accuracy; None = placed by hand
+    source: str = ""                    # how lat/lng were set: gps, map, drag, search, manual
 
     def to_dict(self) -> dict:
-        return {"label": self.label, "lat": self.lat, "lng": self.lng, "x": self.x, "y": self.y, "heading": self.heading}
+        return {"label": self.label, "lat": self.lat, "lng": self.lng, "x": self.x, "y": self.y,
+                "heading": self.heading, "accuracy_m": self.accuracy_m, "source": self.source}
 
     @classmethod
     def from_dict(cls, d: Optional[dict], default_label: str = "") -> "Location":
         d = d or {}
+        lat, lng = normalize_latlng(d.get("lat"), d.get("lng"))
         return cls(
             label=d.get("label") or default_label,
-            lat=d.get("lat"), lng=d.get("lng"), x=d.get("x"), y=d.get("y"), heading=d.get("heading"),
+            lat=lat, lng=lng, x=d.get("x"), y=d.get("y"), heading=d.get("heading"),
+            accuracy_m=d.get("accuracy_m"), source=d.get("source") or "",
         )
 
 
@@ -648,6 +654,7 @@ class CameraManager:
         self.cameras: Dict[str, Camera] = {}
         self.links: List[dict] = []
         self.thresholds: Dict[str, float] = {}
+        self.site: Optional[dict] = None   # {lat, lng, label, zoom}: where the map opens
         self.frame_hooks: List[Callable] = []
         self._restore()
 
@@ -666,6 +673,12 @@ class CameraManager:
                 self._create(c["id"], c["name"], c["source"], Location.from_dict(c.get("location"), c["name"]))
             except Exception as exc:
                 print(f"[cameras] could not restore {c}: {exc}")
+        site = data.get("site")
+        if isinstance(site, dict) and site.get("lat") is not None:
+            try:
+                self.site = self._clean_site(site)
+            except (TypeError, ValueError):
+                self.site = None
         self.links = [
             {**l, "id": self.link_id(l["a"], l["b"])} for l in data.get("links", [])
             if l.get("a") in self.cameras and l.get("b") in self.cameras
@@ -673,7 +686,8 @@ class CameraManager:
 
     def save(self):
         with self._lock:
-            data = {"cameras": [c.persist_dict() for c in self.cameras.values()], "links": self.links}
+            data = {"cameras": [c.persist_dict() for c in self.cameras.values()], "links": self.links,
+                    "site": self.site}
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.store_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -718,6 +732,23 @@ class CameraManager:
         if start:
             camera.start()
         return camera
+
+    @staticmethod
+    def _clean_site(site: dict) -> dict:
+        lat, lng = normalize_latlng(site.get("lat"), site.get("lng"))
+        if lat is None:
+            raise ValueError("Site needs lat and lng")
+        zoom = site.get("zoom")
+        return {"lat": lat, "lng": lng, "label": str(site.get("label") or "")[:200],
+                "zoom": int(zoom) if zoom is not None else 17,
+                "accuracy_m": site.get("accuracy_m"), "source": site.get("source") or ""}
+
+    def set_site(self, site: Optional[dict]) -> Optional[dict]:
+        self.site = self._clean_site(site) if site else None
+        self.save()
+        audit("SITE_SET", f"{self.site['label'] or 'site'} at {self.site['lat']:.5f}, {self.site['lng']:.5f}"
+              if self.site else "site location cleared", actor="operator")
+        return self.site
 
     def get(self, cam_id: str) -> Optional[Camera]:
         return self.cameras.get(cam_id)

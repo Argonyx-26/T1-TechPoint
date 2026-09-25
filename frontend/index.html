@@ -814,6 +814,27 @@ textarea:focus {
 .map-mode button { background: transparent; border: 0; color: var(--text-muted); padding: 8px 12px; font-size: 10px;
     font-weight: 700; letter-spacing: 1px; cursor: pointer; }
 .map-mode button.active { background: rgba(248, 215, 148, .14); color: var(--khaki); }
+.street-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 22px 8px; }
+.street-tools.hidden { display: none; }
+.geo-search { position: relative; flex: 1 1 320px; display: flex; gap: 6px; }
+.geo-search input { flex: 1; min-width: 0; background: var(--noir-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-primary); padding: 8px 10px; font-size: 12px; }
+.geo-results { position: absolute; top: 100%; left: 0; right: 0; z-index: 1200; margin-top: 4px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-pop); max-height: 260px; overflow: auto; }
+.geo-results.hidden { display: none; }
+.geo-results button { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--border);
+    color: var(--text-primary); padding: 8px 10px; font-size: 11px; cursor: pointer; }
+.geo-results button:hover { background: rgba(248, 215, 148, .1); }
+.geo-results small { display: block; padding: 6px 10px; color: var(--text-muted); font-size: 9px; }
+.cand-popup { font-size: 11px; min-width: 200px; }
+.cand-popup b { color: var(--khaki); }
+.cand-popup .pop-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.cand-popup .pop-actions button { font-size: 10px; padding: 6px; }
+.locate-qr { display: flex; justify-content: center; background: #fff; border-radius: var(--radius-sm); padding: 10px; margin: 10px 22px; }
+.locate-qr svg { width: 220px; height: 220px; }
+.locate-url { margin: 0 22px; font-family: var(--font-mono); font-size: 10px; word-break: break-all; color: var(--khaki); }
+.locate-steps { margin: 10px 22px 16px; padding-left: 18px; font-size: 11px; color: var(--text-muted); }
+.loc-hint { margin: 0 22px 8px; font-size: 11px; color: var(--khaki); min-height: 14px; }
 .map-hint { margin: 0 22px 10px; min-height: 16px; font-family: var(--font-mono); font-size: 10px; color: var(--khaki); }
 .map-stage { position: relative; margin: 0 22px 14px; border-radius: var(--radius-md); overflow: hidden;
     border: 1px solid var(--border); background: var(--noir); aspect-ratio: 16 / 10; }
@@ -1809,6 +1830,15 @@ textarea:focus {
                         <input type="file" id="planFile" accept=".png,.jpg,.jpeg,.svg,.webp" hidden>
                     </div>
                 </div>
+                <div class="street-tools hidden" id="streetTools">
+                    <div class="geo-search">
+                        <input type="search" id="geoSearch" placeholder="Search address or place, e.g. Andheri Station, Mumbai" autocomplete="off">
+                        <button type="button" class="secondary-btn demo-camera-btn" id="geoSearchBtn">SEARCH</button>
+                        <div class="geo-results hidden" id="geoResults"></div>
+                    </div>
+                    <button type="button" class="secondary-btn demo-camera-btn" id="myLocationBtn" title="Browser location: on a laptop this is usually IP / Wi-Fi based">USE MY LOCATION</button>
+                    <button type="button" class="secondary-btn demo-camera-btn" id="setSiteBtn" title="Open the map here from now on">SET SITE HERE</button>
+                </div>
                 <div class="map-hint" id="mapHint"></div>
                 <div class="map-stage" id="mapStage">
                     <div class="site-plan" id="sitePlan">
@@ -2445,10 +2475,33 @@ textarea:focus {
                 <input type="number" id="locLng" step="0.000001" placeholder="77.5946">
             </label>
         </div>
+        <div class="loc-hint" id="locHint"></div>
         <div class="modal-footer">
+            <button class="secondary-btn" id="locPhoneGps">PHONE GPS (QR)</button>
             <button class="secondary-btn" id="locMyPosition">USE MY LOCATION</button>
             <button class="primary-btn" id="locSave">SAVE LOCATION</button>
         </div>
+    </div>
+</div>
+
+
+<div id="locateModal" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div>
+                <span class="section-kicker">PHONE GPS</span>
+                <h2 id="locateTitle">Locate camera</h2>
+            </div>
+            <button class="close-btn" id="closeLocate">&times;</button>
+        </div>
+        <div class="locate-qr" id="locateQr"></div>
+        <div class="locate-url" id="locateUrl"></div>
+        <ol class="locate-steps">
+            <li>Phone on the same Wi-Fi / hotspot as this laptop.</li>
+            <li>Stand next to the camera, scan the code.</li>
+            <li>Certificate warning: tap <b>Advanced &rarr; Proceed</b> (self-signed, this laptop only).</li>
+            <li>Allow location. The camera is placed once GPS is within 20 m.</li>
+        </ol>
     </div>
 </div>
 
@@ -3430,6 +3483,7 @@ function buildCameraTile(cam) {
                 <span class="cam-alert-badge none" title="Unacknowledged alerts"></span>
                 <span class="camera-live cam-state"></span>
                 <button class="secondary-btn camera-pin" type="button" title="Edit location">&#128205;</button>
+                <button class="secondary-btn camera-gps" type="button" title="Locate with phone GPS (QR code)">GPS</button>
                 <button class="secondary-btn camera-remove" type="button" title="Remove camera">&times;</button>
             </div>
         </div>
@@ -3462,6 +3516,7 @@ function buildCameraTile(cam) {
         focusCamera(cam.id);
     });
     tile.querySelector(".camera-pin").addEventListener("click", () => openLocationEditor(cam.id));
+    tile.querySelector(".camera-gps").addEventListener("click", () => openLocateQR(cam.id));
     tile.querySelector(".camera-remove").addEventListener("click", async () => {
         if (!confirm(`Remove ${cam.code} ${cam.name}?`)) return;
         try {
@@ -3653,6 +3708,7 @@ async function loadCameras(prefetched) {
     renderCameraWall();
     updateFocusedUI();
     renderMap();
+    noticeLocatedCameras();
     updateModulesPerf();
 }
 
@@ -3831,15 +3887,26 @@ let hasUploadedPlan = false;
 let routeOverlay = null;     // Phase 6/7: [{cam_id, label, color, dashed}]
 let lastMapFly = 0;
 let lastPlanHTML = "";
+let siteLocation = null;     // {lat, lng, label, zoom} from /api/site
+let candidate = null;        // a searched / GPS / dragged point not yet saved
+let candidateLayer = null;
+let accuracyLayer = null;
+const prevCamLoc = new Map(); // camera id -> "lat,lng" last seen, to notice phone-GPS fixes
+const APPROX_M = 200;         // browser fixes worse than this are IP / Wi-Fi guesses
 
 function markerColor(cam) {
     if (cam.status !== "online") return MAP_COLORS.offline;
     return MAP_COLORS[cam.worst_alert || "none"];
 }
 
+// Directions from wherever the responder is to the exact camera position.
 function navigateUrl(loc) {
     return loc && loc.lat != null && loc.lng != null
-        ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : null;
+        ? `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}` : null;
+}
+
+function fmtAccuracy(m) {
+    return m == null ? "" : m >= 1000 ? `±${(m / 1000).toFixed(1)} km` : `±${Math.round(m)} m`;
 }
 
 // An alert keeps the location its camera had when it fired; if that had no
@@ -3999,16 +4066,31 @@ function onMarkerClick(camId) {
 // ----- street map -----
 function initStreetMap() {
     if (leafletMap || typeof L === "undefined") return;
-    leafletMap = L.map("streetMap", { zoomControl: true, attributionControl: true }).setView([20, 0], 2);
-    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    // Every saved point is also normalised server-side, so a click on a
+    // wrapped copy of the world can never store lng 437 again.
+    leafletMap = L.map("streetMap", { zoomControl: true, attributionControl: true, worldCopyJump: true }).setView([20, 0], 2);
+    const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
     });
-    tiles.on("tileload", () => { tilesLoaded++; });
-    tiles.on("tileerror", () => { tileErrors++; });
-    tiles.addTo(leafletMap);
+    const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19,
+        attribution: "Tiles &copy; Esri - Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+    });
+    [street, satellite].forEach(t => {
+        t.on("tileload", () => { tilesLoaded++; });
+        t.on("tileerror", () => { tileErrors++; });
+    });
+    street.addTo(leafletMap);
+    L.control.layers({ "Street": street, "Satellite": satellite }, null, { position: "topright" }).addTo(leafletMap);
+    accuracyLayer = L.layerGroup().addTo(leafletMap);
+    candidateLayer = L.layerGroup().addTo(leafletMap);
     leafletLinkLayer = L.layerGroup().addTo(leafletMap);
     leafletRouteLayer = L.layerGroup().addTo(leafletMap);
+    leafletMap.on("popupopen", event => {
+        event.popup.getElement()?.querySelector(".pop-focus")
+            ?.addEventListener("click", e => focusCamera(e.target.dataset.cam));
+    });
     leafletMap.on("click", event => {
         if (mapAction && mapAction.kind === "place") {
             placeCameraAt({ lat: +event.latlng.lat.toFixed(6), lng: +event.latlng.lng.toFixed(6) });
@@ -4035,17 +4117,26 @@ function renderStreetMap(fit = false) {
         seen.add(cam.id);
         let marker = leafletMarkers.get(cam.id);
         if (!marker) {
-            marker = L.marker([loc.lat, loc.lng], { icon: streetIcon(cam) }).addTo(leafletMap);
+            // Draggable: fine-tune any pin by hand, saved on drop.
+            marker = L.marker([loc.lat, loc.lng], { icon: streetIcon(cam), draggable: true, autoPan: true }).addTo(leafletMap);
             marker.on("click", () => {
                 if (mapAction && mapAction.kind === "link") {
                     linkClick(cam.id);
                     return;
                 }
-                marker.bindPopup(popupHTML(cameras.find(c => c.id === cam.id) || cam)).openPopup();
+                openCameraPopup(cam.id);
+            });
+            marker.on("dragstart", () => { marker._dragging = true; });
+            marker.on("dragend", async () => {
+                const p = marker.getLatLng().wrap();
+                const c = cameras.find(x => x.id === cam.id) || cam;
+                await patchLocation(cam.id, { lat: +p.lat.toFixed(7), lng: +p.lng.toFixed(7), accuracy_m: null, source: "drag" });
+                marker._dragging = false;
+                showToast(`${c.code} moved - saved`);
             });
             leafletMarkers.set(cam.id, marker);
         }
-        marker.setLatLng([loc.lat, loc.lng]);
+        if (!marker._dragging) marker.setLatLng([loc.lat, loc.lng]);
         marker.setIcon(streetIcon(cam));
         marker.bindTooltip(`${cam.code} ${loc.label || cam.name}`);
     });
@@ -4055,6 +4146,13 @@ function renderStreetMap(fit = false) {
             leafletMarkers.delete(id);
         }
     }
+    accuracyLayer.clearLayers();
+    cameras.forEach(cam => {
+        const loc = cam.location || {};
+        if (loc.lat == null || !loc.accuracy_m) return;
+        L.circle([loc.lat, loc.lng], { radius: loc.accuracy_m, color: markerColor(cam), weight: 1, fillOpacity: .08, interactive: false })
+            .addTo(accuracyLayer);
+    });
     leafletLinkLayer.clearLayers();
     links.forEach(link => {
         const a = cameras.find(c => c.id === link.a)?.location, b = cameras.find(c => c.id === link.b)?.location;
@@ -4070,9 +4168,182 @@ function renderStreetMap(fit = false) {
             L.polyline(pts.map(l => [l.lat, l.lng]), { color: "#5fd3e6", weight: 5, dashArray: "12 10" }).addTo(leafletRouteLayer);
         }
     }
-    if (fit) {
-        const placed = cameras.map(c => c.location).filter(l => l && l.lat != null);
-        if (placed.length) leafletMap.fitBounds(placed.map(l => [l.lat, l.lng]), { maxZoom: 18, padding: [40, 40] });
+    if (fit) centerStreetMap();
+}
+
+// Placed cameras win; otherwise the saved site; never a guessed city.
+function centerStreetMap() {
+    if (!leafletMap) return;
+    const placed = cameras.map(c => c.location).filter(l => l && l.lat != null);
+    if (placed.length) {
+        leafletMap.fitBounds(placed.map(l => [l.lat, l.lng]), { maxZoom: 18, padding: [40, 40] });
+    } else if (siteLocation) {
+        leafletMap.setView([siteLocation.lat, siteLocation.lng], siteLocation.zoom || 17);
+    } else {
+        leafletMap.setView([20, 0], 2);
+        setMapHint("No site set yet: search your address (or drag a pin), then SET SITE HERE");
+    }
+}
+
+function openCameraPopup(camId) {
+    const marker = leafletMarkers.get(camId);
+    const cam = cameras.find(c => c.id === camId);
+    if (!marker || !cam) return;
+    marker.bindPopup(popupHTML(cam), { autoPan: true }).openPopup();
+}
+
+// ----- site location: search, my location, set site -----
+async function loadSite() {
+    try {
+        siteLocation = (await api("/site")).site;
+    } catch {}
+}
+
+function showCandidate(point, zoom) {
+    if (!leafletMap) return;
+    candidate = point;
+    candidateLayer.clearLayers();
+    if (point.accuracy_m) {
+        L.circle([point.lat, point.lng], { radius: point.accuracy_m, color: "#5fd3e6", weight: 1, fillOpacity: .1, interactive: false })
+            .addTo(candidateLayer);
+    }
+    const marker = L.marker([point.lat, point.lng], { draggable: true, autoPan: true }).addTo(candidateLayer);
+    marker.on("dragend", () => {
+        const p = marker.getLatLng().wrap();
+        showCandidate({ lat: +p.lat.toFixed(7), lng: +p.lng.toFixed(7), label: candidate.label, source: "drag", accuracy_m: null });
+    });
+    const box = document.createElement("div");
+    box.className = "cand-popup";
+    const cam = cameras.find(c => c.id === document.getElementById("mapCameraSelect").value);
+    box.innerHTML = `<b>${escapeHTML(point.label || "Selected point")}</b>
+        <div class="pop-meta">${point.lat.toFixed(6)}, ${point.lng.toFixed(6)} ${escapeHTML(fmtAccuracy(point.accuracy_m))}
+            &middot; drag to adjust</div>
+        <div class="pop-actions">
+            <button class="primary-btn" data-act="site">SET AS SITE</button>
+            ${cam ? `<button class="secondary-btn" data-act="place">PLACE ${escapeHTML(cam.code)} HERE</button>` : ""}
+        </div>`;
+    box.querySelector('[data-act="site"]').addEventListener("click", () => saveSite(candidate));
+    box.querySelector('[data-act="place"]')?.addEventListener("click", async () => {
+        await patchLocation(cam.id, { lat: candidate.lat, lng: candidate.lng, accuracy_m: candidate.accuracy_m ?? null,
+                                      source: candidate.source || "map" });
+        candidateLayer.clearLayers();
+        showToast(`${cam.code} placed`);
+    });
+    marker.bindPopup(box).openPopup();
+    if (point.accuracy_m && point.accuracy_m > 100) {
+        leafletMap.fitBounds(L.latLng(point.lat, point.lng).toBounds(point.accuracy_m * 2.2));
+    } else if (zoom) {
+        leafletMap.flyTo([point.lat, point.lng], zoom);
+    }
+}
+
+async function saveSite(point) {
+    let p = point || candidate;
+    if (!p && leafletMap) {
+        const c = leafletMap.getCenter().wrap();
+        p = { lat: c.lat, lng: c.lng, label: "", source: "map" };
+    }
+    if (!p) return;
+    if (p.accuracy_m > APPROX_M &&
+        !confirm(`This location is approximate (${fmtAccuracy(p.accuracy_m)}). Set the site here anyway?`)) return;
+    try {
+        const res = await api("/site", {
+            method: "PUT",
+            body: JSON.stringify({ lat: p.lat, lng: p.lng, label: p.label || "", zoom: leafletMap ? leafletMap.getZoom() : 17,
+                                   accuracy_m: p.accuracy_m ?? null, source: p.source || "map" })
+        });
+        siteLocation = res.site;
+        candidateLayer?.clearLayers();
+        setMapHint("");
+        showToast(`Site set${siteLocation.label ? `: ${siteLocation.label.split(",")[0]}` : ""}`);
+    } catch (error) {
+        showToast(`Site not saved: ${error.message}`);
+    }
+}
+
+async function geoSearch() {
+    const q = document.getElementById("geoSearch").value.trim();
+    const box = document.getElementById("geoResults");
+    if (!q) return;
+    box.classList.remove("hidden");
+    box.innerHTML = "<small>Searching...</small>";
+    try {
+        const { results, attribution } = await api(`/geocode?q=${encodeURIComponent(q)}`);
+        if (!results.length) {
+            box.innerHTML = `<small>No match for "${escapeHTML(q)}" - try adding the city</small>`;
+            return;
+        }
+        box.innerHTML = results.map((r, i) => `<button data-i="${i}">${escapeHTML(r.label)}</button>`).join("")
+            + `<small>${escapeHTML(attribution)}</small>`;
+        box.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+            const r = results[Number(b.dataset.i)];
+            box.classList.add("hidden");
+            showCandidate({ lat: r.lat, lng: r.lng, label: r.label, source: "search", accuracy_m: null }, 17);
+        }));
+    } catch (error) {
+        box.innerHTML = `<small>${escapeHTML(error.message)}</small>`;
+    }
+}
+
+// Browser geolocation. On a laptop over a phone hotspot this is IP / Wi-Fi
+// based and can be off by kilometres, so anything worse than APPROX_M is
+// shown as a circle and never saved silently.
+function browserLocation(onFix, onApprox, onError) {
+    if (!navigator.geolocation) {
+        onError("Location is not available in this browser");
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(pos => {
+        const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy_m: Math.round(pos.coords.accuracy),
+                      label: "My location", source: "browser" };
+        (fix.accuracy_m > APPROX_M ? onApprox : onFix)(fix);
+    }, err => onError(err.code === 1 ? "Location permission denied" : "Could not read your location"),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
+
+function approxMessage(fix) {
+    return `Approximate location (${fmtAccuracy(fix.accuracy_m)}) - search your address, drag the pin, or use phone GPS`;
+}
+
+function useMyLocationOnMap() {
+    setMapHint("Reading location...");
+    browserLocation(
+        fix => { setMapHint(`My location ${fmtAccuracy(fix.accuracy_m)}`); showCandidate(fix, 18); },
+        fix => { setMapHint(approxMessage(fix)); showToast(approxMessage(fix)); showCandidate(fix); },
+        msg => { setMapHint(msg); showToast(msg); }
+    );
+}
+
+// A camera whose position changed without us moving it (phone GPS): say so and show it.
+function noticeLocatedCameras() {
+    cameras.forEach(cam => {
+        const loc = cam.location || {};
+        const key = loc.lat != null ? `${loc.lat},${loc.lng}` : "";
+        const before = prevCamLoc.get(cam.id);
+        prevCamLoc.set(cam.id, key);
+        if (before === undefined || before === key || !key || loc.source !== "gps") return;
+        showToast(`${cam.code} located via phone GPS ${fmtAccuracy(loc.accuracy_m)}`);
+        document.getElementById("locateModal").classList.remove("show");
+        if (mapMode !== "street") setMapMode("street");
+        lastMapFly = 0;
+        mapFlyToCamera(cam.id);
+    });
+}
+
+async function openLocateQR(camId) {
+    const cam = cameras.find(c => c.id === camId);
+    if (!cam) return;
+    document.getElementById("locateTitle").textContent = `Locate ${cam.code} with phone GPS`;
+    document.getElementById("locateQr").innerHTML = "";
+    document.getElementById("locateUrl").textContent = "Loading...";
+    document.getElementById("locateModal").classList.add("show");
+    try {
+        const link = await api(`/cameras/${encodeURIComponent(camId)}/locate`);
+        document.getElementById("locateQr").innerHTML = link.qr_svg;
+        document.getElementById("locateUrl").textContent = link.url
+            + (link.https ? "" : "  (HTTPS locate server is off - the phone will not offer GPS; paste coordinates instead)");
+    } catch (error) {
+        document.getElementById("locateUrl").textContent = error.message;
     }
 }
 
@@ -4082,6 +4353,7 @@ function setMapMode(mode) {
     document.getElementById("modeStreet").classList.toggle("active", mode === "street");
     document.getElementById("sitePlan").classList.toggle("hidden", mode !== "plan");
     document.getElementById("streetMap").classList.toggle("hidden", mode !== "street");
+    document.getElementById("streetTools").classList.toggle("hidden", mode !== "street");
     cancelMapAction();
     if (mode === "street") {
         if (!navigator.onLine) {
@@ -4245,6 +4517,11 @@ document.addEventListener("keydown", event => {
 document.getElementById("modePlan").addEventListener("click", () => setMapMode("plan"));
 document.getElementById("modeStreet").addEventListener("click", () => setMapMode("street"));
 document.getElementById("placeCameraBtn").addEventListener("click", startPlacing);
+document.getElementById("geoSearchBtn").addEventListener("click", geoSearch);
+document.getElementById("geoSearch").addEventListener("keydown", e => { if (e.key === "Enter") geoSearch(); });
+document.getElementById("myLocationBtn").addEventListener("click", useMyLocationOnMap);
+document.getElementById("setSiteBtn").addEventListener("click", () => saveSite());
+document.getElementById("closeLocate").addEventListener("click", () => document.getElementById("locateModal").classList.remove("show"));
 document.getElementById("linkCamerasBtn").addEventListener("click", startLinking);
 document.getElementById("uploadPlanBtn").addEventListener("click", () => document.getElementById("planFile").click());
 document.getElementById("planFile").addEventListener("change", async event => {
@@ -4265,17 +4542,21 @@ document.getElementById("planFile").addEventListener("change", async event => {
 
 function loadSitePlanImage() {
     const img = document.getElementById("sitePlanImg");
-    img.onload = () => {
-        hasUploadedPlan = true;
-        img.classList.remove("hidden");
-        renderSitePlan();
-    };
-    img.onerror = () => {
-        hasUploadedPlan = false;
-        img.classList.add("hidden");
-        renderSitePlan();
-    };
-    img.src = `${API}/siteplan?t=${Date.now()}`;
+    return new Promise(resolve => {
+        img.onload = () => {
+            hasUploadedPlan = true;
+            img.classList.remove("hidden");
+            renderSitePlan();
+            resolve();
+        };
+        img.onerror = () => {
+            hasUploadedPlan = false;
+            img.classList.add("hidden");
+            renderSitePlan();
+            resolve();
+        };
+        img.src = `${API}/siteplan?t=${Date.now()}`;
+    });
 }
 
 // A new alert flies the map to its camera and pulses the marker.
@@ -4283,8 +4564,12 @@ function mapFlyToCamera(camId) {
     const cam = cameras.find(c => c.id === camId);
     if (!cam || Date.now() - lastMapFly < 3000) return;
     lastMapFly = Date.now();
+    if (mapMode === "plan" && !planPoint(cam) && cam.location?.lat != null && navigator.onLine) {
+        setMapMode("street");   // this camera is only placed on the street map
+    }
     if (mapMode === "street" && leafletMap && cam.location?.lat != null) {
         leafletMap.flyTo([cam.location.lat, cam.location.lng], Math.max(leafletMap.getZoom(), 17));
+        leafletMap.once("moveend", () => openCameraPopup(camId));
         const dot = leafletMarkers.get(camId)?.getElement()?.querySelector(".street-dot");
         if (dot) {
             dot.classList.remove("flash");
@@ -4296,6 +4581,7 @@ function mapFlyToCamera(camId) {
         if (marker) {
             marker.classList.add("flash");
             setTimeout(() => marker.classList.remove("flash"), 3000);
+            showPlanPopup(camId);
         }
     }
 }
@@ -4696,6 +4982,9 @@ function openLocationEditor(camId) {
     document.getElementById("locLabel").value = cam.location?.label || "";
     document.getElementById("locLat").value = cam.location?.lat ?? "";
     document.getElementById("locLng").value = cam.location?.lng ?? "";
+    const loc = cam.location || {};
+    document.getElementById("locHint").textContent = loc.source === "gps"
+        ? `Located via phone GPS ${fmtAccuracy(loc.accuracy_m)}` : "";
     locationModal.classList.add("show");
 }
 
@@ -4706,14 +4995,22 @@ document.getElementById("locMyPosition").addEventListener("click", () => {
         showToast("Location is not available in this browser");
         return;
     }
-    navigator.geolocation.getCurrentPosition(
-        pos => {
-            document.getElementById("locLat").value = pos.coords.latitude.toFixed(6);
-            document.getElementById("locLng").value = pos.coords.longitude.toFixed(6);
+    const hint = document.getElementById("locHint");
+    hint.textContent = "Reading location...";
+    browserLocation(
+        fix => {
+            document.getElementById("locLat").value = fix.lat.toFixed(6);
+            document.getElementById("locLng").value = fix.lng.toFixed(6);
+            hint.textContent = `My location ${fmtAccuracy(fix.accuracy_m)}`;
         },
-        () => showToast("Could not read your location"),
-        { timeout: 8000 }
+        fix => { hint.textContent = approxMessage(fix); },   // not filled in: it would be wrong
+        msg => { hint.textContent = msg; }
     );
+});
+
+document.getElementById("locPhoneGps").addEventListener("click", () => {
+    locationModal.classList.remove("show");
+    openLocateQR(locationCamId);
 });
 
 document.getElementById("locSave").addEventListener("click", async () => {
@@ -4721,6 +5018,9 @@ document.getElementById("locSave").addEventListener("click", async () => {
         const v = document.getElementById(id).value.trim();
         return v === "" ? null : Number(v);
     };
+    const old = cameras.find(c => c.id === locationCamId)?.location || {};
+    const lat = num("locLat"), lng = num("locLng");
+    const moved = lat !== (old.lat ?? null) || lng !== (old.lng ?? null);
     try {
         await api(`/cameras/${locationCamId}`, {
             method: "PATCH",
@@ -4728,8 +5028,8 @@ document.getElementById("locSave").addEventListener("click", async () => {
                 name: document.getElementById("locName").value.trim() || null,
                 location: {
                     label: document.getElementById("locLabel").value.trim(),
-                    lat: num("locLat"),
-                    lng: num("locLng")
+                    lat, lng,
+                    ...(moved ? { accuracy_m: null, source: "manual" } : {})
                 }
             })
         });
@@ -5417,7 +5717,7 @@ async function initialize() {
 
     logAudit("DASHBOARD_OPENED", navigator.userAgent.split(") ")[0] + ")");
 
-    loadSitePlanImage();
+    const planLoaded = loadSitePlanImage();
 
     refreshAskStats();
     loadModules();
@@ -5428,8 +5728,16 @@ async function initialize() {
         loadStatus(),
         loadAlerts(),
         loadZones(),
-        loadThresholds()
+        loadThresholds(),
+        loadSite()
     ]);
+
+    // Open where the cameras are: the street map when there is a site or a
+    // placed camera and no uploaded site plan.
+    await planLoaded;
+    if (!hasUploadedPlan && (siteLocation || cameras.some(c => c.location?.lat != null)) && navigator.onLine) {
+        setMapMode("street");
+    }
 
     showToast("VIGIL dashboard initialized");
 }
