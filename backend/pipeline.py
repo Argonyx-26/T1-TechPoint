@@ -61,6 +61,7 @@ class FramePipeline:
 
         detections = self.object_detector.infer(frame)
         tracks = self.track_manager.update(detections, timestamp)
+        self.last_tracks = tracks  # read by the per-camera analytics hooks (search, behaviour)
         rule_alerts = self.rule_engine.evaluate(tracks, zones, timestamp)
         # Low-floor detections (down to WEAPON_MIN_CONF) -- used only for
         # keeping the on-screen box/label visually continuous. Anything that

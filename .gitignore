@@ -21,3 +21,6 @@ sample_data/*
 
 # capture sessions + fine-tune frames (large, local only)
 data/
+
+# OpenCLIP weights (578 MB), downloaded once into the cache
+models/clip/

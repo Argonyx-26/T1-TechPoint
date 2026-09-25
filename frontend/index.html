@@ -862,6 +862,41 @@ textarea:focus {
 .nav-link:hover { text-decoration: underline; }
 .modal-location { margin: -8px 22px 14px; font-size: 11px; color: var(--text-muted); }
 
+/* Ask Vigil */
+.ask-row { display: flex; gap: 8px; padding: 0 22px 10px; }
+.ask-row input { flex: 1; background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 11px 14px; font-size: 13px; color: var(--text-primary); }
+.ask-row select { background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-primary); padding: 0 10px; font-size: 11px; }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 22px 8px; }
+.ask-chip { background: rgba(95, 211, 230, .08); border: 1px solid rgba(95, 211, 230, .3); color: #9fe3ee;
+    border-radius: 999px; padding: 5px 10px; font-size: 10px; cursor: pointer; }
+.ask-note { padding: 0 22px 12px; font-size: 10px; color: var(--wasabi-dim); }
+.ask-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 0 22px 22px; }
+.ask-result { background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+    cursor: pointer; transition: border-color .2s ease; }
+.ask-result:hover { border-color: #5fd3e6; }
+.ask-result img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #080d0c; }
+.ask-result .meta { padding: 6px 8px; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); line-height: 1.5; }
+.ask-result .meta b { color: #9fe3ee; font-size: 10px; }
+.ask-result .match { float: right; color: var(--khaki); font-weight: 700; }
+.ask-empty { grid-column: 1 / -1; font-size: 11px; color: var(--text-muted); padding: 12px 0; }
+.follow-banner { display: flex; align-items: center; gap: 10px; margin: 0 22px 12px; padding: 9px 12px; border-radius: var(--radius-sm);
+    background: rgba(95, 211, 230, .1); border: 1px solid rgba(95, 211, 230, .45); font-family: var(--font-mono);
+    font-size: 10px; color: #9fe3ee; }
+.follow-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: #5fd3e6; animation: dotPulse 1s ease-in-out infinite; }
+.follow-banner button { margin-left: auto; }
+.subject-top { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 18px 22px 0; }
+.subject-top img { width: 160px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: #080d0c; }
+.subject-facts { font-size: 12px; line-height: 1.8; color: var(--text-primary); }
+.subject-facts span { color: var(--text-muted); font-size: 10px; letter-spacing: .8px; display: inline-block; width: 110px; }
+.sightings { display: flex; flex-direction: column; gap: 6px; padding: 14px 22px 0; }
+.sighting { display: grid; grid-template-columns: 48px 1fr auto; gap: 10px; align-items: center; padding: 6px 8px;
+    background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 11px; }
+.sighting img { width: 48px; height: 60px; object-fit: cover; border-radius: 4px; background: #080d0c; }
+.sighting small { color: var(--text-muted); font-family: var(--font-mono); font-size: 9px; }
+.reid-badge { font-family: var(--font-mono); font-size: 9px; color: #9fe3ee; }
+
 /* add-camera dialog */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 22px 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
@@ -1758,6 +1793,39 @@ textarea:focus {
                 <div class="links-list" id="linksList"></div>
             </section>
 
+            <!-- ASK VIGIL -->
+            <section class="panel ask-panel" id="askPanel">
+                <div class="panel-header">
+                    <div>
+                        <span class="section-kicker">ASK VIGIL</span>
+                        <h2>Search Across Cameras</h2>
+                    </div>
+                    <span class="alert-counter" id="askStats" title="Indexed looks in the search buffer">0</span>
+                </div>
+                <div class="follow-banner hidden" id="followBanner">
+                    <span class="dot"></span>
+                    <span id="followText">FOLLOWING</span>
+                    <button class="secondary-btn" id="followStop">STOP</button>
+                </div>
+                <div class="ask-row">
+                    <input type="text" id="askQuery" placeholder="Describe clothing or carried objects, e.g. person with a backpack" maxlength="200">
+                    <select id="askMinutes" title="Search window">
+                        <option value="5">5 min</option>
+                        <option value="15">15 min</option>
+                        <option value="30" selected>30 min</option>
+                    </select>
+                    <button class="primary-btn" id="askBtn">ASK</button>
+                </div>
+                <div class="ask-chips">
+                    <button class="ask-chip" type="button">person with a backpack</button>
+                    <button class="ask-chip" type="button">person in a black t-shirt</button>
+                    <button class="ask-chip" type="button">person holding a bottle</button>
+                    <button class="ask-chip" type="button">person wearing glasses</button>
+                </div>
+                <div class="ask-note">Appearance only (clothing, carried objects). No face recognition; race, ethnicity and religion are not searchable.</div>
+                <div class="ask-results" id="askResults"></div>
+            </section>
+
             <!-- SOURCE CONTROL -->
 
             <section class="panel">
@@ -2249,11 +2317,40 @@ textarea:focus {
 
         <div class="modal-ack-row">
             <button class="primary-btn" id="ackAlert">ACKNOWLEDGE</button>
+            <button class="secondary-btn" id="backtrackBtn">BACKTRACK</button>
             <span class="ack-note" id="ackNote"></span>
         </div>
+        <div class="sightings" id="backtrackList"></div>
+        <div style="height:18px"></div>
 
     </div>
 
+</div>
+
+
+<!-- ============================= -->
+<!-- ASK VIGIL SUBJECT -->
+<!-- ============================= -->
+
+<div id="subjectModal" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div>
+                <span class="section-kicker">ASK VIGIL</span>
+                <h2 id="subjectTitle">Subject</h2>
+            </div>
+            <button class="close-btn" id="closeSubject">&times;</button>
+        </div>
+        <div class="subject-top">
+            <img id="subjectThumb" alt="Best view of the subject">
+            <div class="subject-facts" id="subjectFacts"></div>
+        </div>
+        <div class="sightings" id="subjectRoute"></div>
+        <div class="modal-footer">
+            <button class="secondary-btn" id="subjectShowRoute">SHOW ROUTE ON MAP</button>
+            <button class="primary-btn" id="subjectFollow">FOLLOW LIVE</button>
+        </div>
+    </div>
 </div>
 
 
@@ -2845,6 +2942,8 @@ function openEvidence(alert) {
         actionsList.classList.add("hidden");
     }
 
+    document.getElementById("backtrackList").innerHTML = "";
+    document.getElementById("backtrackBtn").disabled = Boolean(alert.simulated);
     const ackButton = document.getElementById("ackAlert");
     const ackNote = document.getElementById("ackNote");
     ackButton.dataset.alertId = alert.simulated ? "" : alert.id;
@@ -4131,6 +4230,199 @@ async function mapSnapshotSVG() {
 
 
 /* =========================================
+   ASK VIGIL
+   Natural-language search over what every
+   camera saw in the last N minutes, cross-camera
+   re-ID (global subject ids), live follow and
+   backtrack. Appearance only.
+========================================= */
+
+let followSeq = 0;
+let following = [];
+let subjectOpen = null;
+
+function hhmmss(ts) {
+    return ts ? new Date(ts * 1000).toLocaleTimeString("en-GB", { hour12: false }) : "-";
+}
+
+function routeToOverlay(route) {
+    return route.map((r, i) => ({
+        cam_id: r.camera_id,
+        time: hhmmss(r.time_in),
+        label: i ? `${Math.max(0, Math.round(r.time_in - (route[i - 1].time_out ?? route[i - 1].last_seen)))}s` : ""
+    }));
+}
+
+function showRouteOnMap(route) {
+    routeOverlay = route.length > 1 ? routeToOverlay(route) : null;
+    lastPlanHTML = "";
+    renderMap();
+    if (route.length) mapFlyToCamera(route[route.length - 1].camera_id);
+}
+
+async function askVigil(query) {
+    const input = document.getElementById("askQuery");
+    const q = (query ?? input.value).trim();
+    input.value = q;
+    const box = document.getElementById("askResults");
+    if (!q) {
+        showToast("Describe what the person looks like");
+        return;
+    }
+    box.innerHTML = `<div class="ask-empty">Searching every camera...</div>`;
+    try {
+        const results = await api("/search", {
+            method: "POST",
+            body: JSON.stringify({ query: q, minutes: Number(document.getElementById("askMinutes").value), limit: 12 })
+        });
+        if (!results.length) {
+            box.innerHTML = `<div class="ask-empty">Nobody indexed in that window yet. Cameras must be running for a little while.</div>`;
+            return;
+        }
+        box.innerHTML = results.map(r => `
+            <div class="ask-result" data-gid="${escapeHTML(r.global_id)}">
+                <img src="${r.thumb_url}" alt="#${escapeHTML(r.global_id)}">
+                <div class="meta">
+                    <span class="match">${r.match}%</span><b>#${escapeHTML(r.global_id)}</b><br>
+                    ${escapeHTML(r.cameras_seen.map(c => c.code).join(", "))}<br>
+                    last ${escapeHTML(hhmmss(r.last_seen))}
+                    ${r.reid_confidence ? `<br><span class="reid-badge">re-ID ${Math.round(r.reid_confidence * 100)}%</span>` : ""}
+                </div>
+            </div>`).join("");
+        box.querySelectorAll(".ask-result").forEach((el, i) => el.addEventListener("click", () => openSubject(results[i])));
+    } catch (error) {
+        box.innerHTML = `<div class="ask-empty">${escapeHTML(error.message)}</div>`;
+    }
+}
+
+async function openSubject(result) {
+    subjectOpen = result;
+    document.getElementById("subjectTitle").textContent = `Subject #${result.global_id}`;
+    document.getElementById("subjectThumb").src = result.thumb_url;
+    const zones = result.zones_visited?.length ? result.zones_visited.join(", ") : "-";
+    document.getElementById("subjectFacts").innerHTML = `
+        <div><span>MATCH</span>${result.match != null ? result.match + "%" : "-"}</div>
+        <div><span>CAMERAS SEEN</span>${escapeHTML(result.cameras_seen.map(c => `${c.place} (${c.code})`).join(", "))}</div>
+        <div><span>ZONES</span>${escapeHTML(zones)}</div>
+        <div><span>FIRST SEEN</span>${hhmmss(result.first_seen)}</div>
+        <div><span>LAST SEEN</span>${hhmmss(result.last_seen)}</div>
+        <div><span>RE-ID</span>${result.reid_confidence ? `linked across cameras at ${Math.round(result.reid_confidence * 100)}% similarity` : "single camera so far"}</div>`;
+    updateSubjectFollowButton();
+    document.getElementById("subjectModal").classList.add("show");
+    try {
+        const route = await api(`/subjects/${encodeURIComponent(result.global_id)}/route`);
+        document.getElementById("subjectRoute").innerHTML = sightingsHTML(route);
+        subjectOpen.route = route;
+    } catch {}
+}
+
+function sightingsHTML(route) {
+    if (!route.length) return `<div class="ask-empty">No sightings recorded.</div>`;
+    return route.map(r => `
+        <div class="sighting">
+            ${r.thumb_url ? `<img src="${r.thumb_url}" alt="">` : "<span></span>"}
+            <div><b>${escapeHTML(r.place)} (${escapeHTML(r.code)})</b><br>
+                <small>in ${hhmmss(r.time_in)} &middot; out ${r.time_out ? hhmmss(r.time_out) : "still visible"}${r.exit_edge ? " &middot; left " + escapeHTML(r.exit_edge) : ""}</small></div>
+            ${r.reid_confidence ? `<span class="reid-badge">re-ID ${Math.round(r.reid_confidence * 100)}%</span>` : "<span></span>"}
+        </div>`).join("");
+}
+
+function updateSubjectFollowButton() {
+    const button = document.getElementById("subjectFollow");
+    const on = subjectOpen && following.some(f => f.global_id === subjectOpen.global_id);
+    button.textContent = on ? "STOP FOLLOWING" : "FOLLOW LIVE";
+}
+
+async function toggleFollow(gid) {
+    const on = following.some(f => f.global_id === gid);
+    try {
+        const status = await api("/follow", { method: on ? "DELETE" : "POST", body: JSON.stringify({ global_id: gid }) });
+        following = status.following;
+        renderFollowBanner();
+        updateSubjectFollowButton();
+        showToast(on ? `Stopped following #${gid}` : `Following #${gid} on every camera`);
+    } catch (error) {
+        showToast(error.message);
+    }
+}
+
+function renderFollowBanner() {
+    const banner = document.getElementById("followBanner");
+    if (!following.length) {
+        banner.classList.add("hidden");
+        return;
+    }
+    const f = following[0];
+    const where = f.camera ? `${f.visible ? "on" : "last seen on"} ${f.camera.place} (${f.camera.code}) ${f.visible ? "" : "at " + hhmmss(f.last_seen)}` : "not seen yet";
+    document.getElementById("followText").textContent =
+        `FOLLOWING #${f.global_id} - ${where}${following.length > 1 ? ` (+${following.length - 1} more)` : ""}`;
+    banner.dataset.gid = f.global_id;
+    banner.classList.remove("hidden");
+}
+
+async function pollFollow() {
+    try {
+        const status = await api(`/follow?since=${followSeq}`);
+        following = status.following;
+        renderFollowBanner();
+        status.events.forEach(event => {
+            followSeq = Math.max(followSeq, event.seq);
+            showToast(`#${event.global_id} ${event.message}`);
+            lastMapFly = 0;
+            mapFlyToCamera(event.camera_id);
+        });
+        if (following.length && following[0].route.length > 1) {
+            routeOverlay = routeToOverlay(following[0].route);
+            lastPlanHTML = "";
+        }
+    } catch {}
+}
+
+async function refreshAskStats() {
+    try {
+        const stats = await api("/search/stats");
+        document.getElementById("askStats").textContent = stats.entries;
+    } catch {}
+}
+
+document.getElementById("askBtn").addEventListener("click", () => askVigil());
+document.getElementById("askQuery").addEventListener("keydown", e => { if (e.key === "Enter") askVigil(); });
+document.querySelectorAll(".ask-chip").forEach(chip => chip.addEventListener("click", () => askVigil(chip.textContent)));
+document.getElementById("closeSubject").addEventListener("click", () => document.getElementById("subjectModal").classList.remove("show"));
+document.getElementById("subjectFollow").addEventListener("click", () => subjectOpen && toggleFollow(subjectOpen.global_id));
+document.getElementById("subjectShowRoute").addEventListener("click", () => {
+    if (subjectOpen?.route) showRouteOnMap(subjectOpen.route);
+    document.getElementById("subjectModal").classList.remove("show");
+    document.getElementById("siteMapPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+});
+document.getElementById("followStop").addEventListener("click", () => {
+    const gid = document.getElementById("followBanner").dataset.gid;
+    if (gid) toggleFollow(gid);
+});
+
+// Evidence modal: where was this alert's subject before?
+document.getElementById("backtrackBtn").addEventListener("click", async () => {
+    const id = document.getElementById("ackAlert").dataset.alertId;
+    const list = document.getElementById("backtrackList");
+    if (!id) return;
+    list.innerHTML = `<div class="ask-empty">Backtracking...</div>`;
+    try {
+        const result = await api(`/alerts/${id}/backtrack`);
+        if (!result.global_id) {
+            list.innerHTML = `<div class="ask-empty">${escapeHTML(result.note)}</div>`;
+            return;
+        }
+        list.innerHTML = `<div class="ask-empty">Subject #${escapeHTML(result.global_id)}: ${result.sightings.length} sighting(s) before this alert
+            <button class="secondary-btn" id="backtrackFollow" style="margin-left:8px">FOLLOW LIVE</button></div>` + sightingsHTML(result.sightings);
+        document.getElementById("backtrackFollow").addEventListener("click", () => toggleFollow(result.global_id));
+        showRouteOnMap(result.sightings);
+    } catch (error) {
+        list.innerHTML = `<div class="ask-empty">${escapeHTML(error.message)}</div>`;
+    }
+});
+
+
+/* =========================================
    4-CAMERA DEMO (real clips, real analysis)
 ========================================= */
 
@@ -4889,6 +5181,8 @@ async function initialize() {
 
     loadSitePlanImage();
 
+    refreshAskStats();
+
     await Promise.all([
         loadLinks(),
         loadCameras(),
@@ -4920,6 +5214,10 @@ setInterval(() => {
 }, 3000);
 
 setInterval(loadLinks, 5000);
+
+setInterval(pollFollow, 1000);
+
+setInterval(refreshAskStats, 5000);
 
 // Zones can change from another dashboard or the API; don't clobber a
 // polygon the operator is in the middle of drawing.

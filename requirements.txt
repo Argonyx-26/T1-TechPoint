@@ -6,3 +6,4 @@ numpy==1.26.4
 ultralytics==8.3.40
 pydantic==2.9.2
 lapx>=0.5.2   # ByteTrack association (ultralytics tracker); without it every frame errors
+open_clip_torch==3.3.0   # Ask Vigil search + re-ID (weights cached in models/clip)

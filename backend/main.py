@@ -25,7 +25,9 @@ from backend.cameras import (
     Camera,
     CameraLimitError,
 )
+from backend import features
 from backend.phones import discover, test_source
+from backend.search import SearchRefused
 from backend.zones import Zone
 
 FRONTEND_DIR = config.BASE_DIR / "frontend"
@@ -148,6 +150,86 @@ def get_evidence(alert_id: int):
     if alert is None or not alert.evidence_path or not Path(alert.evidence_path).exists():
         raise HTTPException(status_code=404, detail="No evidence available for this alert")
     return FileResponse(alert.evidence_path, media_type="image/jpeg")
+
+
+# ---------- Ask Vigil: search, follow, backtrack ----------
+class SearchIn(BaseModel):
+    query: str = Field(..., max_length=200)
+    minutes: float = Field(30, gt=0, le=240)
+    limit: int = Field(12, ge=1, le=50)
+    camera_ids: Optional[List[str]] = None
+
+
+@app.post("/api/search")
+def run_search(body: SearchIn):
+    if not features.enabled("search"):
+        raise HTTPException(status_code=400, detail="The search module is switched off (Analytics Modules)")
+    try:
+        results = app_state.search.search(body.query, body.minutes, body.limit, body.camera_ids)
+    except SearchRefused as exc:
+        audit("SEARCH_REFUSED", f"'{body.query}': {exc}", actor="operator")
+        raise HTTPException(status_code=400, detail=str(exc))
+    top = f"; top #{results[0]['global_id']} {results[0]['match']}%" if results else "; no results"
+    audit("SEARCH_RUN", f"'{body.query}' last {body.minutes:g} min{top}", actor="operator")
+    return results
+
+
+@app.get("/api/search/thumb/{entry_id}")
+def search_thumb(entry_id: int):
+    jpeg = app_state.search.thumb(entry_id)
+    if jpeg is None:
+        raise HTTPException(status_code=404, detail="Thumbnail expired")
+    return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/search/reid-diagnostics")
+def reid_diagnostics():
+    return app_state.search.reid_diagnostics()
+
+
+@app.get("/api/search/stats")
+def search_stats():
+    return app_state.search.stats()
+
+
+class FollowIn(BaseModel):
+    global_id: str = Field(..., max_length=16)
+
+
+@app.post("/api/follow")
+def follow_subject(body: FollowIn):
+    app_state.search.follow(body.global_id)
+    return app_state.search.follow_status()
+
+
+@app.delete("/api/follow")
+def unfollow_subject(body: FollowIn):
+    app_state.search.unfollow(body.global_id)
+    return app_state.search.follow_status()
+
+
+@app.get("/api/follow")
+def follow_status(since: int = 0):
+    return app_state.search.follow_status(since)
+
+
+@app.get("/api/subjects/{global_id}/route")
+def subject_route(global_id: str):
+    return app_state.search.route(global_id)
+
+
+@app.get("/api/alerts/{alert_id}/backtrack")
+def backtrack_alert(alert_id: int):
+    alert = app_state.alert_manager.get(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    gid = app_state.search.subject_for_alert(alert)
+    if gid is None:
+        return {"global_id": None, "sightings": [],
+                "note": "No indexed person matches this alert (bags and weapons without a visible person can't be backtracked)"}
+    audit("BACKTRACK", f"alert #{alert_id} -> subject #{gid}", actor="operator", alert_id=alert_id,
+          camera_id=alert.camera_id)
+    return {"global_id": gid, "sightings": app_state.search.route(gid, until=alert.timestamp)}
 
 
 # ---------- zones (per camera; /api/zones = camera 1) ----------

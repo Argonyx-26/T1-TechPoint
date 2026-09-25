@@ -132,5 +132,41 @@ DEMO_CAMERAS = [
     {"name": "Corridor B", "source": "confusers.mp4", "location": {"label": "Corridor B"}},
 ]  # single-source flow: wait this long for a first frame before reporting failure
 
+# --- Analytics modules: each can be switched off (/api/features) if FPS drops --
+FEATURE_DEFAULTS = {
+    "pose": True,          # yolov8n-pose, needed by fighting/throwing/distress
+    "fighting": True,
+    "throwing": True,
+    "distress": True,      # hands raised, person down, crowd panic
+    "search": True,        # Ask Vigil indexing + natural-language search
+    "reid": True,          # cross-camera re-identification (global subject ids)
+    "gap_tracking": True,  # blind-spot / missing-subject alerts between linked cameras
+}
+
+# --- Ask Vigil (OpenCLIP search + re-ID) ---------------------------------------
+CLIP_MODEL = "ViT-B-32"
+CLIP_PRETRAINED = "laion2b_s34b_b79k"
+CLIP_CACHE_DIR = BASE_DIR / "models" / "clip"   # weights cached here: works offline
+SEARCH_CLASSES = {"person", "backpack", "handbag", "suitcase"}
+SEARCH_SAMPLE_S = 1.0          # at most one crop per track per second...
+SEARCH_KEEP_BEST_S = 5.0       # ...keeping the sharpest one per track per 5s
+SEARCH_MAX_ENTRIES = 8000      # ring buffer size
+SEARCH_RETENTION_MIN = 30      # entries and sightings expire after this
+SEARCH_QUEUE_MAX = 256         # pending crops; new ones are dropped when full (never block a camera)
+SEARCH_BATCH = 16
+SEARCH_CROP_PAD = 0.03         # tight crops: less background, better re-ID (0.886 -> 0.905 measured)
+SIGHTING_CLOSE_S = 3.0         # a sighting closes when its track has been lost this long
+# Cosine similarity of MEAN embeddings for "same person". Spec default was
+# 0.82; measured on our clips (2026-09-25): same person across two phone
+# sessions 0.886-0.905 (single crops only ~0.81), different people across
+# clips p95 0.71 / p99 0.868; 0.82 merged 2.5% of stranger pairs.
+REID_THRESHOLD = 0.86
+REID_WARMUP_S = 5.0            # a new sighting is sampled every second for this long...
+REID_REVISIT_EMBS = 4          # ...and re-ID is re-run on its mean for its first N crops
+REID_MARGIN = 0.03             # the best candidate must beat the runner-up (another subject) by this
+REID_WINDOW_S = 300.0          # only match people who left within the last 5 minutes
+REID_ACTIVE_S = 1.0            # a subject visible elsewhere within this is not a candidate
+REID_MIN_GAP_S = 0.5
+
 STREAM_JPEG_QUALITY = 80
 STREAM_MAX_FPS = int(os.environ.get("ARGONYX_STREAM_MAX_FPS", "60"))

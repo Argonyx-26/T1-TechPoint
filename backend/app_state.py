@@ -10,6 +10,7 @@ from typing import Optional, Union
 from backend import config
 from backend.analytics.rules import RuleEngine
 from backend.cameras import STATUS_ONLINE, Camera, CameraManager
+from backend.search import SearchIndex
 
 PRIMARY_ID = "cam-1"
 
@@ -18,6 +19,9 @@ class AppState:
     def __init__(self):
         # Restores saved cameras in STOPPED state: the server always starts idle.
         self.manager = CameraManager()
+        # Ask Vigil: indexes every camera through a per-frame hook.
+        self.search = SearchIndex(self.manager)
+        self.manager.frame_hooks.append(self.search.on_frame)
         self._start_time = time.time()
 
     @property
