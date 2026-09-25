@@ -171,10 +171,15 @@ def open_capture(source: Source) -> cv2.VideoCapture:
         cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
         if cap.isOpened():
             return cap
-    cap = cv2.VideoCapture(source)
-    if not is_file_source(source) and not isinstance(source, int):
+    if isinstance(source, str) and not is_file_source(source):
+        # Network stream (DroidCam, IP Webcam, RTSP): bounded open/read waits,
+        # so a locked phone is noticed within seconds instead of hanging read().
+        ms = int(config.STREAM_TIMEOUT_S * 1000)
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG,
+                               [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, ms, cv2.CAP_PROP_READ_TIMEOUT_MSEC, ms])
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    return cap
+        return cap
+    return cv2.VideoCapture(source)
 
 
 # ---------------------------------------------------------------------------

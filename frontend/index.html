@@ -775,6 +775,44 @@ textarea:focus {
 .alert-item.simulated { opacity: 0.8; border-style: dashed; }
 
 .alert-item.acknowledged { opacity: 0.45; }
+
+/* camera wall: backend camera states */
+.camera-live.reconnecting { color: var(--khaki); }
+.camera-live.reconnecting::before { background: var(--khaki); animation: dotPulse 1s ease-in-out infinite; }
+.camera-live.stopped { color: var(--wasabi-dim); }
+.camera-live.stopped::before { background: var(--wasabi-dim); }
+.camera-feed img { display: block; object-fit: contain; background: #080d0c; }
+.camera-empty.hidden { display: none; }
+.camera-wall-empty {
+    grid-column: 1 / -1;
+    padding: 28px 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+}
+
+/* add-camera dialog */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 22px 0; }
+.form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
+    letter-spacing: .6px; color: var(--text-muted); }
+.form-grid .span-2 { grid-column: 1 / -1; }
+.form-grid input, .form-grid select {
+    background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-size: 13px; color: var(--text-primary); font-family: inherit;
+}
+.test-row { display: flex; align-items: center; gap: 14px; padding: 16px 22px 0; }
+.test-thumb { width: 160px; aspect-ratio: 4 / 3; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--noir-raised); object-fit: cover; }
+.test-result { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.test-result.ok { color: #8fd19e; }
+.test-result.bad { color: #ef8f66; }
+.discover-list { display: flex; flex-direction: column; gap: 6px; padding: 12px 22px 0; }
+.discover-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px;
+    background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 11px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 22px 22px; }
 .alert-item.acknowledged .alert-type::after {
     content: " \2713 ACK";
     font-size: 9px;
@@ -1601,14 +1639,16 @@ textarea:focus {
 
 
             <!-- DYNAMIC MULTI-CAMERA SURVEILLANCE -->
-            <section class="panel multi-camera-panel hidden" id="cameraWallPanel">
+            <section class="panel multi-camera-panel" id="cameraWallPanel">
                 <div class="panel-header">
                     <div>
                         <span class="section-kicker">MULTI-SOURCE SURVEILLANCE</span>
                         <h2>Camera Wall</h2>
                     </div>
                     <div class="camera-wall-header-actions">
-                        <span class="live-indicator"><span></span> AUTO-EXPANDING FEED</span>
+                        <span class="live-indicator" id="camerasOnline"><span></span> 0 ONLINE</span>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="discoverBtn">DISCOVER</button>
+                        <button type="button" class="primary-btn demo-camera-btn" id="addCameraBtn">+ ADD CAMERA</button>
                     </div>
                 </div>
                 <div class="camera-wall count-1" id="cameraWall"></div>
@@ -2109,6 +2149,79 @@ textarea:focus {
 
     </div>
 
+</div>
+
+
+<!-- ============================= -->
+<!-- ADD CAMERA -->
+<!-- ============================= -->
+
+<div id="addCameraModal" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div>
+                <span class="section-kicker">CAMERA SETUP</span>
+                <h2>Add Camera</h2>
+            </div>
+            <button class="close-btn" id="closeAddCamera">&times;</button>
+        </div>
+
+        <div class="form-grid">
+            <label class="span-2">
+                Camera type
+                <select id="camType">
+                    <option value="droidcam">DroidCam phone (Wi-Fi)</option>
+                    <option value="ipwebcam">IP Webcam app (Wi-Fi)</option>
+                    <option value="webcam">Laptop webcam</option>
+                    <option value="url">Stream URL (RTSP / HTTP)</option>
+                    <option value="sample">Sample clip</option>
+                </select>
+            </label>
+            <label class="cam-field" data-types="droidcam ipwebcam">
+                Phone IP
+                <input type="text" id="camIp" placeholder="192.168.1.20" inputmode="decimal">
+            </label>
+            <label class="cam-field" data-types="droidcam ipwebcam">
+                Port
+                <input type="number" id="camPort" value="4747">
+            </label>
+            <label class="cam-field span-2 hidden" data-types="webcam">
+                Webcam index
+                <input type="number" id="camIndex" value="0" min="0">
+            </label>
+            <label class="cam-field span-2 hidden" data-types="url">
+                Stream URL
+                <input type="text" id="camUrl" placeholder="rtsp://... or http://.../video">
+            </label>
+            <label class="cam-field span-2 hidden" data-types="sample">
+                Sample clip
+                <select id="camSample"></select>
+            </label>
+            <label>
+                Name
+                <input type="text" id="camName" placeholder="Main Gate cam">
+            </label>
+            <label>
+                Location
+                <input type="text" id="camLocation" placeholder="Main Gate">
+            </label>
+        </div>
+
+        <div class="test-row">
+            <img class="test-thumb hidden" id="camThumb" alt="Test frame">
+            <div>
+                <button class="secondary-btn" id="camTestBtn">TEST</button>
+                <div class="test-result" id="camTestResult">Grabs one frame (3s max) before saving.</div>
+            </div>
+        </div>
+
+        <div class="discover-list" id="discoverList"></div>
+
+        <div class="modal-footer">
+            <button class="secondary-btn" id="camDiscoverBtn">DISCOVER PHONES</button>
+            <button class="primary-btn" id="camSaveBtn">SAVE CAMERA</button>
+        </div>
+    </div>
 </div>
 
 
@@ -2880,6 +2993,293 @@ document
 
 
 /* =========================================
+   CAMERA WALL
+   Every tile is a backend camera: the browser
+   never connects to a phone (the free DroidCam
+   app serves one client); it only shows the
+   analyzed /video_feed/{id}.
+========================================= */
+
+const cameraWall = document.getElementById("cameraWall");
+let cameras = [];
+const cameraTiles = new Map();
+
+function camStatusLabel(cam) {
+    if (cam.status === "online") return { text: "LIVE", cls: "" };
+    if (cam.status === "reconnecting") return { text: "RECONNECTING", cls: "reconnecting" };
+    if (cam.status === "connecting") return { text: "CONNECTING", cls: "reconnecting" };
+    if (cam.status === "offline") {
+        const since = cam.offline_since
+            ? new Date(cam.offline_since * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+            : "";
+        return { text: `OFFLINE since ${since}`, cls: "offline" };
+    }
+    return { text: "STOPPED", cls: "stopped" };
+}
+
+function buildCameraTile(cam) {
+    const tile = document.createElement("article");
+    tile.className = "camera-tile";
+    tile.dataset.camera = cam.id;
+    tile.innerHTML = `
+        <div class="camera-tile-head">
+            <div class="camera-title">
+                <strong class="cam-code"></strong>
+                <small class="cam-source"></small>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <span class="camera-live cam-state"></span>
+                <button class="secondary-btn camera-remove" type="button" title="Remove camera">&times;</button>
+            </div>
+        </div>
+        <div class="camera-feed">
+            <img alt="Camera stream">
+            <div class="camera-empty cam-empty">
+                <span class="cam-empty-text">NO SIGNAL</span>
+                <small class="cam-empty-sub"></small>
+            </div>
+            <div class="camera-overlay">
+                <span class="cam-place"></span>
+                <span class="cam-fps"></span>
+            </div>
+        </div>
+        <div class="camera-actions">
+            <button class="secondary-btn cam-toggle" type="button">STOP</button>
+        </div>
+    `;
+    const img = tile.querySelector("img");
+    img.src = `/video_feed/${encodeURIComponent(cam.id)}?t=${Date.now()}`;
+
+    tile.querySelector(".camera-remove").addEventListener("click", async () => {
+        if (!confirm(`Remove ${cam.code} ${cam.name}?`)) return;
+        try {
+            await api(`/cameras/${cam.id}`, { method: "DELETE" });
+            showToast(`${cam.code} removed`);
+            loadCameras();
+        } catch (error) {
+            showToast(`Remove failed: ${error.message}`);
+        }
+    });
+    tile.querySelector(".cam-toggle").addEventListener("click", async () => {
+        const current = cameras.find(c => c.id === cam.id);
+        const action = current && current.status !== "stopped" ? "stop" : "start";
+        try {
+            await api(`/cameras/${cam.id}/${action}`, { method: "POST" });
+            if (action === "start") img.src = `/video_feed/${encodeURIComponent(cam.id)}?t=${Date.now()}`;
+            loadCameras();
+        } catch (error) {
+            showToast(`${action} failed: ${error.message}`);
+        }
+    });
+    return tile;
+}
+
+function updateCameraTile(tile, cam) {
+    const state = camStatusLabel(cam);
+    tile.querySelector(".cam-code").textContent = `${cam.code} ${cam.name}`;
+    tile.querySelector(".cam-source").textContent = cam.source_label || "";
+    const live = tile.querySelector(".cam-state");
+    live.className = `camera-live cam-state ${state.cls}`;
+    live.textContent = state.text;
+    tile.querySelector(".cam-place").textContent = cam.location?.label || cam.name;
+    tile.querySelector(".cam-fps").textContent = cam.status === "online" ? `${cam.fps} FPS` : "";
+    tile.querySelector(".cam-toggle").textContent = cam.status === "stopped" ? "START" : "STOP";
+    const empty = tile.querySelector(".cam-empty");
+    empty.classList.toggle("hidden", cam.status === "online");
+    tile.querySelector(".cam-empty-text").textContent = state.text;
+    tile.querySelector(".cam-empty-sub").textContent =
+        cam.status === "reconnecting" ? "Retrying automatically" :
+        cam.status === "offline" ? "Still retrying every 30s" :
+        cam.status === "stopped" ? "Press START" : "";
+}
+
+function renderCameraWall() {
+    const ids = new Set(cameras.map(c => c.id));
+    for (const [id, tile] of cameraTiles) {
+        if (!ids.has(id)) {
+            tile.remove();
+            cameraTiles.delete(id);
+        }
+    }
+    cameras.forEach(cam => {
+        let tile = cameraTiles.get(cam.id);
+        if (!tile) {
+            tile = buildCameraTile(cam);
+            cameraTiles.set(cam.id, tile);
+        }
+        cameraWall.appendChild(tile);  // keeps tiles in camera order
+        updateCameraTile(tile, cam);
+    });
+    let empty = cameraWall.querySelector(".camera-wall-empty");
+    if (!cameras.length && !empty) {
+        empty = document.createElement("div");
+        empty.className = "camera-wall-empty";
+        empty.textContent = "No cameras yet. + ADD CAMERA connects a DroidCam phone, the laptop webcam or a clip.";
+        cameraWall.appendChild(empty);
+    } else if (cameras.length && empty) {
+        empty.remove();
+    }
+    cameraWall.className = `camera-wall count-${Math.max(1, cameras.length)}`;
+    const online = cameras.filter(c => c.status === "online").length;
+    document.getElementById("camerasOnline").innerHTML = `<span></span> ${online}/${cameras.length} ONLINE`;
+}
+
+async function loadCameras() {
+    try {
+        cameras = await api("/cameras");
+        renderCameraWall();
+    } catch {}
+}
+
+
+/* =========================================
+   ADD CAMERA (DroidCam preset, TEST, DISCOVER)
+========================================= */
+
+const addCameraModal = document.getElementById("addCameraModal");
+const camType = document.getElementById("camType");
+
+function showCameraFields() {
+    const type = camType.value;
+    document.querySelectorAll(".cam-field").forEach(field => {
+        field.classList.toggle("hidden", !field.dataset.types.split(" ").includes(type));
+    });
+    if (type === "droidcam") document.getElementById("camPort").value = 4747;
+    if (type === "ipwebcam") document.getElementById("camPort").value = 8080;
+    resetCameraTest();
+}
+
+function resetCameraTest() {
+    document.getElementById("camThumb").classList.add("hidden");
+    const result = document.getElementById("camTestResult");
+    result.className = "test-result";
+    result.textContent = "Grabs one frame (3s max) before saving.";
+}
+
+function cameraSourceFromForm() {
+    const type = camType.value;
+    if (type === "droidcam" || type === "ipwebcam") {
+        const ip = document.getElementById("camIp").value.trim()
+            .replace(/^https?:\/\//i, "").replace(/[:/].*$/, "");
+        const port = document.getElementById("camPort").value || (type === "droidcam" ? 4747 : 8080);
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error("Enter the phone's IP address, e.g. 192.168.1.20");
+        return `http://${ip}:${port}/video`;
+    }
+    if (type === "webcam") return String(document.getElementById("camIndex").value || 0);
+    if (type === "sample") return document.getElementById("camSample").value;
+    const url = document.getElementById("camUrl").value.trim();
+    if (!url) throw new Error("Enter a stream URL");
+    return url;
+}
+
+async function openAddCamera(prefill = {}) {
+    try {
+        const names = await api("/samples");
+        document.getElementById("camSample").innerHTML =
+            names.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join("");
+    } catch {}
+    if (prefill.type) camType.value = prefill.type;
+    showCameraFields();
+    if (prefill.ip) document.getElementById("camIp").value = prefill.ip;
+    if (prefill.port) document.getElementById("camPort").value = prefill.port;
+    addCameraModal.classList.add("show");
+}
+
+async function testCameraSource() {
+    const result = document.getElementById("camTestResult");
+    const thumb = document.getElementById("camThumb");
+    let source;
+    try {
+        source = cameraSourceFromForm();
+    } catch (error) {
+        result.className = "test-result bad";
+        result.textContent = error.message;
+        return;
+    }
+    result.className = "test-result";
+    result.textContent = "Testing...";
+    thumb.classList.add("hidden");
+    try {
+        const test = await api("/cameras/test", { method: "POST", body: JSON.stringify({ source }) });
+        if (test.ok) {
+            thumb.src = test.thumb;
+            thumb.classList.remove("hidden");
+            result.className = "test-result ok";
+            result.textContent = `OK - ${test.width}x${test.height} from ${test.source_label}`;
+        } else {
+            result.className = "test-result bad";
+            result.textContent = test.error;
+        }
+    } catch (error) {
+        result.className = "test-result bad";
+        result.textContent = error.message;
+    }
+}
+
+async function discoverPhones(targetList) {
+    targetList.innerHTML = `<div class="test-result">Scanning the local network (about 3s)...</div>`;
+    try {
+        const result = await api("/cameras/discover");
+        if (!result.found.length) {
+            targetList.innerHTML = `<div class="test-result bad">No phones found on ${escapeHTML(result.subnets.join(", ") || "this network")}. Is DroidCam open on the same Wi-Fi?</div>`;
+            return;
+        }
+        targetList.innerHTML = result.found.map(f => `
+            <div class="discover-item">
+                <span>${escapeHTML(f.app)} &middot; ${escapeHTML(f.ip)}:${f.port}${f.state === "busy" ? " (busy - another client)" : ""}</span>
+                <button class="secondary-btn discover-use" data-ip="${escapeHTML(f.ip)}" data-port="${f.port}">USE</button>
+            </div>`).join("");
+        targetList.querySelectorAll(".discover-use").forEach(button => {
+            button.addEventListener("click", async () => {
+                const port = Number(button.dataset.port);
+                await openAddCamera({ type: port === 8080 ? "ipwebcam" : "droidcam", ip: button.dataset.ip, port });
+                testCameraSource();
+            });
+        });
+    } catch (error) {
+        targetList.innerHTML = `<div class="test-result bad">Discovery failed: ${escapeHTML(error.message)}</div>`;
+    }
+}
+
+camType.addEventListener("change", showCameraFields);
+document.getElementById("addCameraBtn").addEventListener("click", () => openAddCamera());
+document.getElementById("discoverBtn").addEventListener("click", () => {
+    openAddCamera();
+    discoverPhones(document.getElementById("discoverList"));
+});
+document.getElementById("camDiscoverBtn").addEventListener("click", () => discoverPhones(document.getElementById("discoverList")));
+document.getElementById("camTestBtn").addEventListener("click", testCameraSource);
+document.getElementById("closeAddCamera").addEventListener("click", () => addCameraModal.classList.remove("show"));
+["camIp", "camPort", "camUrl", "camIndex", "camSample"].forEach(id =>
+    document.getElementById(id).addEventListener("change", resetCameraTest));
+
+document.getElementById("camSaveBtn").addEventListener("click", async () => {
+    let source;
+    try {
+        source = cameraSourceFromForm();
+    } catch (error) {
+        showToast(error.message);
+        return;
+    }
+    const name = document.getElementById("camName").value.trim();
+    const label = document.getElementById("camLocation").value.trim();
+    try {
+        const cam = await api("/cameras", {
+            method: "POST",
+            body: JSON.stringify({ name, source, location: label ? { label } : null })
+        });
+        addCameraModal.classList.remove("show");
+        document.getElementById("discoverList").innerHTML = "";
+        ["camName", "camLocation", "camIp", "camUrl"].forEach(id => document.getElementById(id).value = "");
+        showToast(`${cam.code} ${cam.name} added`);
+        loadCameras();
+    } catch (error) {
+        showToast(error.message);
+    }
+});
+
+
+/* =========================================
    ZONE DRAWING
    The canvas wrapper takes the frame's aspect
    ratio, so canvas point / canvas size is the
@@ -3525,6 +3925,7 @@ async function initialize() {
     logAudit("DASHBOARD_OPENED", navigator.userAgent.split(") ")[0] + ")");
 
     await Promise.all([
+        loadCameras(),
         loadStatus(),
         loadAlerts(),
         loadZones(),
@@ -3544,6 +3945,8 @@ initialize();
 setInterval(loadStatus, 1000);
 
 setInterval(loadAlerts, 2000);
+
+setInterval(loadCameras, 2000);
 
 setInterval(() => {
     loadAudit();

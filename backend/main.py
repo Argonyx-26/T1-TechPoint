@@ -3,6 +3,7 @@ per camera, and exposes the cameras/alerts/zones/source/threshold/audit REST
 API. The single-source endpoints (/video_feed, /api/source/*, /api/zones)
 act on camera 1.
 """
+import re
 import shutil
 import time
 import uuid
@@ -24,6 +25,7 @@ from backend.cameras import (
     Camera,
     CameraLimitError,
 )
+from backend.phones import discover, test_source
 from backend.zones import Zone
 
 FRONTEND_DIR = config.BASE_DIR / "frontend"
@@ -329,6 +331,38 @@ def add_camera(body: CameraCreate):
     except (CameraLimitError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return camera.to_dict()
+
+
+class SourceTest(BaseModel):
+    source: str
+
+
+@app.post("/api/cameras/test")
+def test_camera_source(body: SourceTest):
+    """Grab one frame (within CAMERA_TEST_TIMEOUT_S) and return a thumbnail.
+    Refuses a phone that is already a camera: DroidCam serves one client."""
+    host = _stream_host(body.source)
+    if host and host in _hosts_in_use():
+        return {"ok": False, "error": f"{host} is already connected as a camera (DroidCam allows one client)"}
+    return test_source(body.source)
+
+
+@app.get("/api/cameras/discover")
+def discover_phones():
+    """Scan the local /24 in parallel for DroidCam (4747) / IP Webcam (8080)."""
+    result = discover(in_use_hosts=_hosts_in_use())
+    audit("CAMERA_DISCOVERY", f"{len(result['found'])} phone(s) found on {', '.join(result['subnets']) or 'no network'}",
+          actor="operator")
+    return result
+
+
+def _stream_host(source: str) -> Optional[str]:
+    m = re.match(r"^[a-z]+://([^/:]+)", str(source).strip(), re.I)
+    return m.group(1) if m else None
+
+
+def _hosts_in_use() -> set:
+    return {h for h in (_stream_host(c.source) for c in app_state.manager.list() if isinstance(c.source, str)) if h}
 
 
 @app.patch("/api/cameras/{cam_id}")
