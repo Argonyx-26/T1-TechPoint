@@ -10,6 +10,7 @@ from typing import Optional, Union
 from backend import config
 from backend.analytics.rules import RuleEngine
 from backend.cameras import STATUS_ONLINE, Camera, CameraManager
+from backend.behavior import BehaviourEngine
 from backend.movements import MovementTracker
 from backend.search import SearchIndex
 
@@ -25,6 +26,9 @@ class AppState:
         self.manager.frame_hooks.append(self.search.on_frame)
         # Blind-spot tracking over the search index's sightings.
         self.movements = MovementTracker(self.search, self.manager, self.manager.alert_manager)
+        # Pose behaviours (fighting, throwing, distress) on the same GPU lock as detection.
+        self.behaviour = BehaviourEngine(self.manager.shared._lock, self.manager.alert_manager)
+        self.manager.frame_hooks.append(self.behaviour.on_frame)
         self._start_time = time.time()
 
     @property

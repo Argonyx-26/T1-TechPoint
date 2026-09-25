@@ -917,6 +917,21 @@ textarea:focus {
 .tl-gap-label.missing { color: #ef5a3a; }
 .tl-axis { display: flex; justify-content: space-between; font: 8px var(--font-mono); color: var(--wasabi-dim); padding: 0 22px 6px; }
 
+/* Analytics Modules */
+.modules { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 18px; }
+.module-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.module-row small { display: block; font-size: 9px; color: var(--text-muted); }
+.switch { position: relative; width: 38px; height: 20px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--noir-raised); border: 1px solid var(--border);
+    cursor: pointer; transition: background .2s ease; }
+.switch span::before { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; border-radius: 50%;
+    background: var(--wasabi-dim); transition: transform .2s ease, background .2s ease; }
+.switch input:checked + span { background: rgba(88, 170, 110, .25); border-color: #6fbf73; }
+.switch input:checked + span::before { transform: translateX(18px); background: #8fd19e; }
+.module-row.needs-pose { opacity: .45; }
+.modules-perf { padding: 0 22px 18px; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
+
 /* add-camera dialog */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 22px 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
@@ -2264,6 +2279,19 @@ textarea:focus {
             </section>
 
 
+            <!-- ANALYTICS MODULES -->
+            <section class="panel modules-panel" id="modulesPanel">
+                <div class="panel-header compact">
+                    <div>
+                        <span class="section-kicker">PERFORMANCE</span>
+                        <h2>Analytics Modules</h2>
+                    </div>
+                </div>
+                <div class="modules" id="modulesList"></div>
+                <div class="modules-perf" id="modulesPerf"></div>
+            </section>
+
+
             <!-- QUICK ACTIONS -->
 
             <section class="panel">
@@ -2556,6 +2584,13 @@ const RESPONSE_ACTIONS = {
     RESTRICTED_ZONE_INTRUSION: ["Dispatch security to the zone", "Verify occupant authorization", "Review recent zone access"],
     CROWD_SURGE: ["Deploy crowd control to the zone", "Open additional exits if available", "Monitor for further buildup"],
     CROWD_THRESHOLD: ["Monitor the zone for further buildup", "Prepare crowd control if it keeps rising"],
+    FIGHT: ["Dispatch security to separate the people involved", "Check for weapons on camera", "Call medical support if anyone is hurt"],
+    HANDS_RAISED: ["Treat as a possible hold-up: alert security silently", "Do not approach alone", "Check the same camera for a weapon", "Notify law enforcement"],
+    PERSON_DOWN: ["Send the nearest staff member / first aider", "Call medical support", "Keep the area clear"],
+    CROWD_PANIC: ["Check the marked origin on camera for the cause", "Open exits and guide people away", "Alert security and medical"],
+    OBJECT_THROWN: ["Check who was targeted", "Dispatch security to the thrower", "Look for injuries or damage"],
+    BLIND_SPOT_GAP: ["Review what happened between the two cameras", "Consider a camera for that blind spot"],
+    SUBJECT_MISSING: ["Search the areas beyond the last camera", "Use Ask Vigil / Follow on the subject"],
     UNATTENDED_OBJECT: ["Cordon off the immediate area", "Do not touch the object", "Notify security / bomb disposal per protocol"],
     WRONG_DIRECTION: ["Alert nearest staff member", "Check for blocked or malfunctioning exit"],
     LOITERING: ["Dispatch patrol to verify", "Review zone camera history"]
@@ -3599,6 +3634,7 @@ async function loadCameras() {
     renderCameraWall();
     updateFocusedUI();
     renderMap();
+    updateModulesPerf();
 }
 
 
@@ -4555,6 +4591,56 @@ document.getElementById("movesExport").addEventListener("click", () => {
 
 
 /* =========================================
+   ANALYTICS MODULES
+   Every analytics module can be switched off
+   if the frame rate drops (logged to audit).
+========================================= */
+
+const MODULES = [
+    ["pose", "Pose estimation", "yolov8n-pose; needed by the three below"],
+    ["fighting", "Fighting", "Possible fight between two people"],
+    ["throwing", "Throwing", "Object thrown, by whom, toward whom"],
+    ["distress", "Distress signals", "Hands raised, person down, crowd panic"],
+    ["search", "Ask Vigil search", "Indexes people and bags for search"],
+    ["reid", "Cross-camera re-ID", "Same person across cameras (global ids)"],
+    ["gap_tracking", "Blind-spot tracking", "Gaps and missing subjects between linked cameras"],
+];
+
+async function loadModules() {
+    let state;
+    try {
+        state = await api("/features");
+    } catch {
+        return;
+    }
+    const list = document.getElementById("modulesList");
+    list.innerHTML = MODULES.map(([key, name, hint]) => `
+        <label class="module-row${["fighting", "throwing", "distress"].includes(key) && !state.pose ? " needs-pose" : ""}">
+            <span>${escapeHTML(name)}<small>${escapeHTML(hint)}</small></span>
+            <span class="switch"><input type="checkbox" data-module="${key}" ${state[key] ? "checked" : ""}><span></span></span>
+        </label>`).join("");
+    list.querySelectorAll("input[data-module]").forEach(input => input.addEventListener("change", async () => {
+        try {
+            await api("/features", { method: "POST", body: JSON.stringify({ [input.dataset.module]: input.checked }) });
+            showToast(`${input.dataset.module} ${input.checked ? "ON" : "OFF"}`);
+            loadModules();
+        } catch (error) {
+            showToast(error.message);
+            input.checked = !input.checked;
+        }
+    }));
+    updateModulesPerf();
+}
+
+function updateModulesPerf() {
+    const online = cameras.filter(c => c.status === "online");
+    document.getElementById("modulesPerf").textContent = online.length
+        ? online.map(c => `${c.code} ${c.fps} fps`).join(" | ")
+        : "No cameras running";
+}
+
+
+/* =========================================
    4-CAMERA DEMO (real clips, real analysis)
 ========================================= */
 
@@ -5314,6 +5400,7 @@ async function initialize() {
     loadSitePlanImage();
 
     refreshAskStats();
+    loadModules();
 
     await Promise.all([
         loadLinks(),

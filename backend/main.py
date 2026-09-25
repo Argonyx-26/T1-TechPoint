@@ -232,6 +232,33 @@ def backtrack_alert(alert_id: int):
     return {"global_id": gid, "sightings": app_state.search.route(gid, until=alert.timestamp)}
 
 
+# ---------- analytics modules on/off ----------
+class FeaturesIn(BaseModel):
+    pose: Optional[bool] = None
+    fighting: Optional[bool] = None
+    throwing: Optional[bool] = None
+    distress: Optional[bool] = None
+    search: Optional[bool] = None
+    reid: Optional[bool] = None
+    gap_tracking: Optional[bool] = None
+
+
+@app.get("/api/features")
+def get_features():
+    return features.all_features()
+
+
+@app.post("/api/features")
+def set_features(body: FeaturesIn):
+    values = body.dict(exclude_none=True)
+    before = features.all_features()
+    after = features.set_features(**values)
+    changed = {k: v for k, v in after.items() if before.get(k) != v}
+    if changed:
+        audit("FEATURES_CHANGED", ", ".join(f"{k} {'ON' if v else 'OFF'}" for k, v in changed.items()), actor="operator")
+    return after
+
+
 # ---------- movement log (blind spots between cameras) ----------
 @app.get("/api/movements")
 def movements(minutes: float = 30):

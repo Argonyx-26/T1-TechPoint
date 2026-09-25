@@ -84,6 +84,11 @@ SEVERITY_WEIGHTS = {
     "CROWD_THRESHOLD": 55,   # absolute count over the zone limit -> MEDIUM
     "WRONG_DIRECTION": 45,
     "BLIND_SPOT_GAP": 50,     # MEDIUM (HIGH when the subject was in a serious alert)
+    "FIGHT": 70,              # HIGH
+    "HANDS_RAISED": 70,       # HIGH, CRITICAL with a confirmed weapon on the same camera
+    "PERSON_DOWN": 70,        # HIGH
+    "CROWD_PANIC": 70,        # HIGH
+    "OBJECT_THROWN": 50,      # MEDIUM, HIGH toward a person or into a restricted zone
     "SUBJECT_MISSING": 50,
     "LOITERING": 30,
 }
@@ -169,6 +174,41 @@ REID_MARGIN = 0.03             # the best candidate must beat the runner-up (ano
 REID_WINDOW_S = 300.0          # only match people who left within the last 5 minutes
 REID_ACTIVE_S = 1.0            # a subject visible elsewhere within this is not a candidate
 REID_MIN_GAP_S = 0.5
+
+# --- Behaviour (pose): fighting, throwing, distress --------------------------------
+POSE_MODEL = "yolov8n-pose.pt"   # pretrained, auto-downloaded by ultralytics
+POSE_FPS = 6                     # per camera, only while people are in view
+POSE_CONF = 0.35
+POSE_KP_CONF = 0.3               # keypoints below this confidence are ignored
+POSE_MATCH_IOU = 0.3             # pose person <-> existing track
+BEHAVIOUR_REARM_S = 10.0         # a behaviour re-alerts only after it was absent this long
+HANDS_RAISED_S = 2.0             # both wrists above the nose this long
+HANDS_RAISED_WEAPON_S = 30.0     # ...CRITICAL if a weapon was confirmed on the camera this recently
+UPRIGHT_ASPECT = 1.4             # box h/w for "upright"
+DOWN_ASPECT = 1.2                # box w/h for "horizontal"
+DOWN_HIP_ANKLE_FRAC = 0.25       # hips within this fraction of the box width of ankle height
+UPRIGHT_LOOKBACK_S = 10.0        # must have been upright this recently (falls, not sleepers)
+PERSON_DOWN_S = 3.0
+FIGHT_WINDOW_S = 2.0
+FIGHT_MIN_RATIO = 0.6            # positive in >= 60% of pose frames over the window
+FIGHT_GAP_FRAC = 0.5             # box gap < 0.5 x person width
+FIGHT_DEPTH_FRAC = 0.25          # feet within this x person height of each other (same ground depth)
+FIGHT_SIZE_RATIO = 1.4           # and similar apparent size
+FIGHT_WRIST_SPEED = 1.2          # wrist/elbow speed, person heights per second
+FIGHT_ENERGY = 0.15              # mean upper-body speed relative to the body, heights/s (both people)
+FIGHT_EXTEND_COS = 0.5           # arm direction vs direction to the other person
+THROW_CLASSES = {"bottle", "cup", "cell phone", "book", "sports ball", "backpack", "handbag"}
+THROW_LOW_CONF = 0.2             # these small classes are tracked from this confidence (throwing only)
+THROW_SPEED = 0.6                # object speed, frame diagonals per second
+THROW_NEAR_WRIST = 0.35          # object within this x person height of a wrist = "in hand"
+THROW_MIN_FRAMES = 3             # moving away for at least this many observations
+WRIST_SPIKE_SPEED = 2.0          # person heights per second
+PANIC_MIN_PEOPLE = 3
+PANIC_SPEED_RATIO = 2.5          # speed vs the person's own 10s baseline
+PANIC_BASELINE_S = 10.0
+PANIC_MIN_SPEED = 0.12           # frame diagonals per second
+PANIC_AWAY_COS = 0.5
+PANIC_SUSTAIN_S = 1.0
 
 # --- Blind-spot tracking between linked cameras ---------------------------------
 GAP_ALERT_S = 60.0             # gap alert when longer than max(2 x link walking time, this)

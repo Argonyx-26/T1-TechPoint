@@ -23,7 +23,7 @@ from typing import Callable, Dict, List, Optional, Union
 import cv2
 import numpy as np
 
-from backend import config
+from backend import config, features
 from backend.alerts.manager import AlertManager
 from backend.audit import audit
 from backend.detection.object_detector import Detection
@@ -68,9 +68,10 @@ class SharedModels:
         """Raw detections as an ultralytics Boxes array (numpy) + class names."""
         with self._lock:
             self._ensure_general()
+            low = config.THROW_LOW_CONF if features.enabled("throwing") else config.DETECTOR_CONF_THRESHOLD
             result = self._general.predict(
                 frame,
-                conf=config.DETECTOR_CONF_THRESHOLD,
+                conf=min(low, config.DETECTOR_CONF_THRESHOLD),
                 device=config.DEVICE,
                 half=config.USE_HALF_PRECISION,
                 verbose=False,
@@ -99,6 +100,15 @@ class CameraObjectDetector:
         boxes, names = self.shared.detect(frame)
         if len(boxes) == 0:
             return []
+        # Below the normal threshold only throwable classes survive (throw detection).
+        keep = [
+            i for i in range(len(boxes))
+            if boxes.conf[i] >= config.DETECTOR_CONF_THRESHOLD or names.get(int(boxes.cls[i])) in config.THROW_CLASSES
+        ]
+        if len(keep) != len(boxes):
+            boxes = boxes[keep]
+            if len(boxes) == 0:
+                return []
         tracks = self.tracker.update(boxes, frame)
         detections = []
         for x1, y1, x2, y2, track_id, score, cls, _ in tracks:
