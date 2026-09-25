@@ -32,6 +32,17 @@ WEAPON_THREAT_CLASSES = {"pistol", "knife"}
 # fraction of the frame are the model latching onto the whole scene (e.g. a
 # phone-filmed monitor) and are dropped before display/alerting.
 WEAPON_MAX_BOX_FRACTION = 0.30
+# Pose check on weapon candidates (analytics/weapon_verify.py): drop a box
+# that mostly covers a face, or sits on a torso with no wrist near it.
+WEAPON_POSE_VERIFY = True
+WEAPON_FACE_OVERLAP = 0.5     # share of the weapon box inside the head region
+WEAPON_FACE_PAD = 0.35        # head region = face keypoints padded by this x face size
+WEAPON_WRIST_REACH = 0.5      # "near a hand" = within this x shoulder width of the box
+# The 5-of-8 filter only counts hits near the current box: a knife lowered out
+# of view plus a flicker on a face elsewhere is not one sustained weapon.
+WEAPON_TRACK_DIST = 1.0       # centre distance, as a multiple of the larger box side
+# Raw frame + raw detections + pose for every fired weapon alert.
+WEAPON_DEBUG_DIR = BASE_DIR / "debug" / "confirmed_alerts"
 
 def _resolve_device() -> str:
     """`ARGONYX_DEVICE` always wins; otherwise auto-pick a CUDA GPU if torch

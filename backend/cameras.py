@@ -55,6 +55,7 @@ class SharedModels:
     def __init__(self):
         self._lock = threading.Lock()
         self._general = None
+        self._pose = None
         self.weapon = WeaponDetector()
 
     def _ensure_general(self):
@@ -81,6 +82,21 @@ class SharedModels:
     def weapons(self, frame):
         with self._lock:
             return self.weapon.infer(frame)
+
+    def pose_people(self, frame):
+        """(17, 3) keypoint arrays for every person in the frame; used to
+        check weapon candidates against faces / torsos (weapon_verify.py)."""
+        with self._lock:
+            if self._pose is None:
+                from ultralytics import YOLO
+
+                self._pose = YOLO(config.POSE_MODEL)
+                audit("MODEL_LOADED", f"weapon pose check: {config.POSE_MODEL}")
+            result = self._pose.predict(frame, conf=config.POSE_CONF, device=config.DEVICE,
+                                        half=config.USE_HALF_PRECISION, verbose=False)[0]
+        if result.keypoints is None or len(result.keypoints) == 0:
+            return []
+        return list(result.keypoints.data.cpu().numpy())
 
 
 class CameraObjectDetector:
@@ -268,6 +284,7 @@ class Camera:
         # Fresh tracker/weapon state every start: a new source is a new scene.
         self.pipeline.object_detector = CameraObjectDetector(self.shared, config.CAMERA_MAX_FPS)
         self.pipeline.weapon_detector = CameraWeaponDetector(self.shared, config.WEAPON_EVERY_N_FRAMES)
+        self.pipeline.pose_fn = self.shared.pose_people
         self._running = True
         self.status = STATUS_CONNECTING
         self._threads = [

@@ -24,3 +24,6 @@ data/
 
 # OpenCLIP weights (578 MB), downloaded once into the cache
 models/clip/
+
+# weapon alert debug dumps
+debug/

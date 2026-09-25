@@ -2,6 +2,7 @@
 alert manager together into a single per-frame `process()` call, and draws
 the overlay the dashboard displays (bounding boxes, zone polygons).
 """
+import json
 import time
 from collections import deque
 from typing import Dict, List
@@ -13,6 +14,7 @@ from backend import config
 from backend.alerts.manager import AlertManager
 from backend.analytics.rules import RuleEngine
 from backend.analytics.weapon_filter import WeaponTemporalFilter
+from backend.analytics.weapon_verify import suppression_reason
 from backend.detection.object_detector import ObjectDetector
 from backend.detection.weapon_detector import WeaponDetection, WeaponDetector
 from backend.tracking import TrackManager
@@ -46,6 +48,8 @@ class FramePipeline:
         self.rule_engine = RuleEngine()
         self.track_manager = TrackManager()
         self.weapon_filter = WeaponTemporalFilter()
+        # frame -> list of (17, 3) keypoint arrays; set by Camera.start. None = no pose check.
+        self.pose_fn = None
         self.last_object_counts: Dict[str, int] = {}
         # Purely visual smoothing for the weapon overlay: a per-class recent-
         # confidence buffer (so the on-screen % doesn't jump frame to frame)
@@ -77,6 +81,19 @@ class FramePipeline:
         weapon_evaluated = weapon_detections is not None
         weapon_detections = weapon_detections or []
         alert_eligible = [wd for wd in weapon_detections if wd.conf >= config.WEAPON_ALERT_MIN_CONF]
+        # A candidate on someone's face or t-shirt is their body, not a weapon:
+        # it neither counts toward the filter nor keeps an overlay alive.
+        people_kps, suppressed = [], []
+        if alert_eligible and self.pose_fn is not None and config.WEAPON_POSE_VERIFY:
+            people_kps = self.pose_fn(frame)
+            for wd in alert_eligible:
+                reason = suppression_reason(wd.bbox, people_kps)
+                if reason:
+                    suppressed.append((wd, reason))
+            if suppressed:
+                gone = {id(wd) for wd, _ in suppressed}
+                alert_eligible = [wd for wd in alert_eligible if id(wd) not in gone]
+                weapon_detections = [wd for wd in weapon_detections if id(wd) not in gone]
 
         # Only a *sustained* weapon detection (seen in most of the last few
         # frames) counts as confirmed -- a lone spurious hit from the
@@ -84,8 +101,12 @@ class FramePipeline:
         # See weapon_filter.py. This runs before the display step below so
         # the overlay can gate on the same bar as a real alert, not a
         # single-frame threshold touch.
-        latest_by_class = {wd.cls_name: wd for wd in alert_eligible}
-        confirmed_classes = set(self.weapon_filter.update(set(latest_by_class))) if weapon_evaluated else set()
+        latest_by_class = {}
+        for wd in alert_eligible:  # strongest box per class
+            if wd.cls_name not in latest_by_class or wd.conf > latest_by_class[wd.cls_name].conf:
+                latest_by_class[wd.cls_name] = wd
+        confirmed_classes = set(self.weapon_filter.update(
+            {c: wd.bbox for c, wd in latest_by_class.items()})) if weapon_evaluated else set()
 
         display_weapons = self._smooth_weapon_display(weapon_detections, confirmed_classes, timestamp)
 
@@ -102,11 +123,32 @@ class FramePipeline:
             wd = latest_by_class.get(cls_name)
             if wd is None:
                 continue
-            self.alert_manager.ingest_weapon_alert(
+            alert = self.alert_manager.ingest_weapon_alert(
                 wd.cls_name, wd.conf, wd.bbox, timestamp, frame=annotated, camera=self.camera
             )
+            if alert is not None:
+                self._dump_weapon_alert(alert, frame, weapon_detections, suppressed, people_kps)
 
         return annotated
+
+    def _dump_weapon_alert(self, alert, frame, weapon_detections, suppressed, people_kps):
+        """debug/confirmed_alerts/alert_<id>.{jpg,json}: the raw (unannotated)
+        frame and everything the decision saw, so a false alarm can be traced."""
+        try:
+            out = config.WEAPON_DEBUG_DIR
+            out.mkdir(parents=True, exist_ok=True)
+            stem = out / f"alert_{alert.id}_{int(alert.timestamp)}"
+            cv2.imwrite(str(stem.with_suffix(".jpg")), frame)
+            det = lambda wd: {"cls": wd.cls_name, "conf": round(wd.conf, 4), "bbox": [round(v, 1) for v in wd.bbox]}
+            stem.with_suffix(".json").write_text(json.dumps({
+                "alert_id": alert.id, "camera_id": alert.camera_id, "ts": alert.timestamp,
+                "message": alert.message, "frame_size": list(frame.shape[:2]),
+                "raw_weapon_detections": [det(wd) for wd in weapon_detections],
+                "suppressed": [dict(det(wd), reason=r) for wd, r in suppressed],
+                "pose_people": [np.round(np.asarray(k, dtype=float), 3).tolist() for k in people_kps],
+            }, indent=1))
+        except Exception:  # debugging aid only; never break the frame loop
+            pass
 
     def _smooth_weapon_display(self, weapon_detections, confirmed_classes, timestamp: float) -> List[WeaponDetection]:
         """Purely cosmetic: average the last few frames' confidence per class
