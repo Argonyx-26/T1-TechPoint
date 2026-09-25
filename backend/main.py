@@ -101,10 +101,10 @@ def camera_snapshot(cam_id: str):
     of holding an MJPEG stream per tile: browsers allow only 6 connections
     per host over HTTP/1.1, and 4 tile streams + the big view + the zone
     backdrop would starve every API call."""
-    _camera_or_404(cam_id)
+    camera = _camera_or_404(cam_id)
     jpeg = app_state.latest_jpeg(cam_id)
     if jpeg is None:
-        raise HTTPException(status_code=503, detail="No frame yet")
+        raise HTTPException(status_code=503, detail=camera.last_error or f"{camera.code} has no frame yet ({camera.status})")
     return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
@@ -615,8 +615,9 @@ def _wait_online(camera: Camera, source) -> dict:
     while time.time() < deadline and camera.status == STATUS_CONNECTING:
         time.sleep(0.1)
     if camera.status != STATUS_ONLINE:
+        reason = camera.last_error or f"Could not open video source: {source}"
         camera.stop()
-        raise HTTPException(status_code=400, detail=f"Could not open video source: {source}")
+        raise HTTPException(status_code=400, detail=reason)
     return camera.to_dict()
 
 
@@ -704,8 +705,9 @@ def _switch_primary(source) -> dict:
     while time.time() < deadline and camera.status == STATUS_CONNECTING:
         time.sleep(0.1)
     if camera.status != STATUS_ONLINE:
+        reason = camera.last_error or f"Could not open video source: {source}"
         camera.stop()
-        raise HTTPException(status_code=400, detail=f"Could not open video source: {source}")
+        raise HTTPException(status_code=400, detail=reason)
     return app_state.status()
 
 

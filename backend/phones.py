@@ -16,13 +16,20 @@ from typing import Iterable, List, Optional, Set
 import cv2
 
 from backend import config
-from backend.cameras import open_capture, resize_to_width, resolve_source, source_label
+from backend.cameras import WEBCAMS, open_capture, resize_to_width, resolve_source, source_label, webcam_open_error
 
 PHONE_PORTS = {4747: "DroidCam", 8080: "IP Webcam"}
 
 
 def phone_url(ip: str, port: int = 4747) -> str:
     return f"http://{ip}:{port}/video"
+
+
+def _thumb(frame, source) -> dict:
+    h, w = frame.shape[:2]
+    _, buf = cv2.imencode(".jpg", resize_to_width(frame, 320), [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+    return {"ok": True, "width": w, "height": h, "source_label": source_label(source),
+            "thumb": "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()}
 
 
 def test_source(raw_source, timeout_s: float = None) -> dict:
@@ -33,19 +40,27 @@ def test_source(raw_source, timeout_s: float = None) -> dict:
         source = resolve_source(raw_source)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    result = {"ok": False, "error": f"No frame from {source_label(source)} within {timeout_s:.0f}s"}
+    if isinstance(source, int):
+        shared = WEBCAMS.get(source)
+        if shared is not None:
+            # Already open for a camera: opening it a second time fails on
+            # Windows, so test with the shared stream instead.
+            owner = shared.users[0] if shared.users else "another camera"
+            frame = shared.latest()
+            if frame is None:
+                return {"ok": False, "error": shared.error or f"Webcam {source} is already in use by {owner} and has no frame yet"}
+            return dict(_thumb(frame, source), shared_with=owner,
+                        note=f"Webcam {source} is already in use by {owner} - this camera will share its stream")
+    result = {"ok": False, "error": webcam_open_error(source) if isinstance(source, int)
+              else f"No frame from {source_label(source)} within {timeout_s:.0f}s"}
 
     def grab():
         cap = open_capture(source)
         try:
             ok, frame = cap.read() if cap.isOpened() else (False, None)
             if ok and frame is not None:
-                h, w = frame.shape[:2]
-                thumb = resize_to_width(frame, 320)
-                _, buf = cv2.imencode(".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
                 result.clear()
-                result.update(ok=True, width=w, height=h, source_label=source_label(source),
-                              thumb="data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode())
+                result.update(_thumb(frame, source))
         finally:
             cap.release()
 

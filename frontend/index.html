@@ -2724,14 +2724,17 @@ async function api(url, options = {}) {
 
     if (!response.ok) {
 
-        let message = "Request failed";
+        let message = `Request failed (HTTP ${response.status} on ${url})`;
+        const body = await response.text().catch(() => "");
 
         try {
-            const data = await response.json();
+            const data = JSON.parse(body);
             message = typeof data.detail === "string"
                 ? data.detail
                 : JSON.stringify(data.detail || message);
-        } catch {}
+        } catch {
+            if (body && body.length < 200) message = `${message}: ${body}`;
+        }
 
         // Callers decide whether the user sees this - background
         // polls stay silent, user actions show a toast.
@@ -3711,7 +3714,8 @@ async function testCameraSource() {
             thumb.src = test.thumb;
             thumb.classList.remove("hidden");
             result.className = "test-result ok";
-            result.textContent = `OK - ${test.width}x${test.height} from ${test.source_label}`;
+            result.textContent = `OK - ${test.width}x${test.height} from ${test.source_label}`
+                + (test.note ? ` (${test.note})` : "");
         } else {
             result.className = "test-result bad";
             result.textContent = test.error;

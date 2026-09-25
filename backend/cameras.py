@@ -209,6 +209,120 @@ def open_capture(source: Source) -> cv2.VideoCapture:
 
 
 # ---------------------------------------------------------------------------
+# Webcams: one owner per physical device
+# ---------------------------------------------------------------------------
+def webcam_open_error(index: int) -> str:
+    return f"Webcam {index} could not be opened - close other apps using the camera (Zoom, Teams, Camera app, a browser tab)"
+
+
+class _Webcam:
+    """One cv2.VideoCapture on one device index, read by a single thread.
+    Every camera on that index reads the latest frame from here, so the device
+    is opened exactly once however many tiles / cameras show it."""
+
+    def __init__(self, index: int, opener: Callable):
+        self.index = index
+        self.users: List[str] = []   # camera codes, first one is the owner
+        self.error = ""
+        self._opener = opener
+        self._cond = threading.Condition()
+        self._frame = None
+        self._seq = 0
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, name=f"webcam-{index}", daemon=True)
+        self._thread.start()
+
+    def _loop(self):
+        backoff = config.RECONNECT_INITIAL_S
+        while self._running:
+            cap = self._opener(self.index)
+            ok, frame = cap.read() if cap.isOpened() else (False, None)
+            if not ok:
+                cap.release()
+                with self._cond:
+                    self.error = webcam_open_error(self.index)
+                    self._cond.notify_all()
+                end = time.time() + backoff
+                while self._running and time.time() < end:
+                    time.sleep(0.1)
+                backoff = min(backoff * 2, config.RECONNECT_MAX_S)
+                continue
+            backoff = config.RECONNECT_INITIAL_S
+            with self._cond:
+                self.error = ""
+            try:
+                while self._running and ok:
+                    with self._cond:
+                        self._frame, self._seq = frame, self._seq + 1
+                        self._cond.notify_all()
+                    ok, frame = cap.read()
+            finally:
+                cap.release()   # the device is free again the moment this thread stops
+            if self._running:
+                with self._cond:
+                    self.error = f"Webcam {self.index} stopped sending frames - reconnecting"
+                    self._cond.notify_all()
+
+    def wait_frame(self, after_seq: int, timeout: float):
+        """(frame, seq) newer than after_seq, or (None, after_seq) on timeout / error."""
+        with self._cond:
+            self._cond.wait_for(lambda: self._seq > after_seq or not self._running or self.error, timeout)
+            if self._seq > after_seq:
+                return self._frame, self._seq
+            return None, after_seq
+
+    def latest(self):
+        with self._cond:
+            return self._frame
+
+    def stop(self):
+        self._running = False
+        with self._cond:
+            self._cond.notify_all()
+        self._thread.join(timeout=5.0)
+
+
+class WebcamHub:
+    def __init__(self, opener: Callable = None):
+        self._lock = threading.Lock()
+        self._devices: Dict[int, _Webcam] = {}
+        self._opener = opener or open_capture
+
+    def acquire(self, index: int, user: str) -> _Webcam:
+        with self._lock:
+            dev = self._devices.get(index)
+            if dev is None:
+                dev = self._devices[index] = _Webcam(index, self._opener)
+            if user not in dev.users:
+                dev.users.append(user)
+            return dev
+
+    def release(self, index: int, user: str):
+        with self._lock:
+            dev = self._devices.get(index)
+            if dev is None:
+                return
+            if user in dev.users:
+                dev.users.remove(user)
+            if dev.users:
+                return
+            del self._devices[index]
+        dev.stop()
+
+    def owner(self, index: int) -> Optional[str]:
+        with self._lock:
+            dev = self._devices.get(index)
+            return dev.users[0] if dev and dev.users else None
+
+    def get(self, index: int) -> Optional[_Webcam]:
+        with self._lock:
+            return self._devices.get(index)
+
+
+WEBCAMS = WebcamHub()
+
+
+# ---------------------------------------------------------------------------
 # Camera
 # ---------------------------------------------------------------------------
 @dataclass
@@ -244,6 +358,7 @@ class Camera:
         self.status = STATUS_STOPPED
         self.offline_since: Optional[float] = None
         self.last_error = ""
+        self.webcams = WEBCAMS
         self.on_frame = on_frame  # hook for later analytics (search indexer, behavior)
 
         self.pipeline = FramePipeline(
@@ -315,6 +430,8 @@ class Camera:
 
     # -- capture: latest frame only, reconnect with backoff -----------------
     def _capture_loop(self):
+        if isinstance(self.source, int):
+            return self._webcam_loop(self.source)
         backoff = config.RECONNECT_INITIAL_S
         ever_online = False
         while self._running:
@@ -322,12 +439,14 @@ class Camera:
             ok, frame = (cap.read() if cap.isOpened() else (False, None))
             if not ok:
                 cap.release()
+                self.last_error = f"No video from {source_label(self.source)}"
                 self._mark_down(ever_online)
                 self._sleep(backoff)
                 backoff = min(backoff * 2, config.RECONNECT_MAX_S)
                 continue
 
             backoff = config.RECONNECT_INITIAL_S
+            self.last_error = ""
             self._mark_up(ever_online)
             ever_online = True
             is_file = is_file_source(self.source)
@@ -350,6 +469,34 @@ class Camera:
             cap.release()
             if self._running:
                 self._mark_down(ever_online)
+
+    def _webcam_loop(self, index: int):
+        """Read a shared webcam (WEBCAMS): never opens the device itself."""
+        hub = self.webcams
+        dev = hub.acquire(index, self.code)
+        owner = dev.users[0]
+        if owner != self.code:
+            audit("WEBCAM_SHARED", f"{self.code} shares webcam {index} with {owner}", camera_id=self.id)
+        ever_online, seq, last_frame_t = False, 0, time.time()
+        try:
+            while self._running:
+                frame, new_seq = dev.wait_frame(seq, 0.5)   # short, so stop() is noticed quickly
+                if frame is None:
+                    stalled = time.time() - last_frame_t > config.STREAM_TIMEOUT_S
+                    if self._running and (dev.error or stalled):
+                        self.last_error = dev.error or f"Webcam {index} sent no frame for {config.STREAM_TIMEOUT_S:.0f}s"
+                        self._mark_down(ever_online)
+                        self._sleep(0.5)
+                    continue
+                last_frame_t = time.time()
+                if self.status != STATUS_ONLINE:
+                    self.last_error = ""
+                    self._mark_up(ever_online)
+                    ever_online = True
+                seq = new_seq
+                self._publish(frame)
+        finally:
+            hub.release(index, self.code)
 
     def _sleep(self, seconds: float):
         end = time.time() + seconds
@@ -446,6 +593,7 @@ class Camera:
             "name": self.name,
             "source_label": source_label(self.source),
             "status": self.status,
+            "error": self.last_error if self.status != STATUS_ONLINE else "",
             "offline_since": self.offline_since,
             "fps": round(self._fps, 1) if self.status == STATUS_ONLINE else 0.0,
             "inference_ms": round(self._proc_ms, 1),
