@@ -330,3 +330,37 @@ def test_crowd_leaving_calmly_is_not_panic():
     counts = [14] * 60 + [14 - k // 10 for k in range(120)]
     motions = [4] * 180
     assert _crowd_frames(counts, motions) == []
+
+
+class _Runner(_T):
+    """A person track moving fast: history spans 0.4 s over 40% of the frame diagonal."""
+    def __init__(self, box, ts):
+        super().__init__(box)
+        self.history = [(ts - 0.4, (100, 100)), (ts - 0.2, (200, 100)), (ts, (420, 100))]
+
+
+def test_scatter_with_little_frame_motion_but_runners_is_panic():
+    # UMN 44 s: 10 -> 2 people, frame motion only 1.7x, but people run
+    import numpy as np
+    state, events = CameraBehaviour(), []
+    base = np.zeros((120, 160), np.uint8)
+    for i in range(90):
+        ts = 1000.0 + i / 6.0
+        n = 12 if i < 60 else max(2, 12 - 3 * (i - 60))
+        tracks = {k: _T((10 * k, 50, 10 * k + 8, 90)) for k in range(n)}
+        if 60 <= i < 66:
+            tracks[99] = _Runner((400, 80, 420, 130), ts)
+        events += state.update(ts, {}, tracks, FRAME, [], gray=base + np.uint8(4 * (i % 2)))
+    assert [e for e in events if e.rule == CROWD_PANIC]
+
+
+def test_scene_cut_is_not_a_scatter():
+    # a cut to an empty scene: every pixel changes and the crowd "vanishes"
+    import numpy as np
+    state, events = CameraBehaviour(), []
+    for i in range(90):
+        ts = 1000.0 + i / 6.0
+        n = 12 if i < 60 else 1
+        gray = np.full((120, 160), 20 if i < 60 else 200, np.uint8) + np.uint8(4 * (i % 2))
+        events += state.update(ts, {}, {k: _T((10 * k, 50, 10 * k + 8, 90)) for k in range(n)}, FRAME, [], gray=gray)
+    assert not [e for e in events if e.rule == CROWD_PANIC]

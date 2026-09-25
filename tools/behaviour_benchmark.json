@@ -130,18 +130,18 @@
   "source": "CAVIAR"
  },
  {
-  "clip": "umn/Crowd-Activity-All.avi",
+  "clip": "umn_clean/Crowd-Activity-All.avi",
   "expect": [
    "CROWD_PANIC"
   ],
-  "source": "UMN (11 scenes: normal walking, then the crowd suddenly scatters)"
+  "source": "UMN (11 scenes: normal walking, then the crowd suddenly scatters); UMN detector overlays removed by tools/clean_overlays.py"
  },
  {
-  "clip": "umn/Thrown-Object-All.avi",
+  "clip": "umn_clean/Thrown-Object-All.avi",
   "expect": [
    "OBJECT_THROWN"
   ],
-  "source": "UMN"
+  "source": "UMN; UMN detector overlays removed by tools/clean_overlays.py"
  },
  {
   "clip": "urfall_cam0/fall-01",

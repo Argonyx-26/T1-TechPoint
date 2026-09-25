@@ -162,7 +162,8 @@ DEMO_CAMERAS = [
 FEATURE_DEFAULTS = {
     "pose": True,          # yolov8n-pose, needed by fighting/throwing/distress
     "fighting": True,
-    "throwing": True,
+    "throwing": False,     # OFF by default: on clean UMN footage (overlays removed) it caught 0/17 real throws
+                           # and only raised stray alerts; the detector cannot see small objects in flight
     "distress": True,      # hands raised, person down, crowd panic
     "search": True,        # Ask Vigil indexing + natural-language search
     "reid": True,          # cross-camera re-identification (global subject ids)
@@ -236,6 +237,23 @@ THROW_SPEED = 0.6                # object speed, frame diagonals per second
 THROW_NEAR_WRIST = 0.35          # object within this x person height of a wrist = "in hand"
 THROW_MIN_FRAMES = 3             # moving away for at least this many observations
 WRIST_SPIKE_SPEED = 2.0          # person heights per second
+# Flying object (throw detection without recognising the object): the
+# detector barely sees a thrown bag/bottle mid-flight on CCTV (UMN: 0-0.25
+# conf), so a small blob that moves in three consecutive analysed frames,
+# outside every person, starting next to someone and travelling fast in a
+# steady direction counts as a throw.
+FLY_ENABLED = False              # measured: loose settings 8/17 UMN throws but 11 false alerts on vtest,
+                                 # strict settings 0/17; not good enough to ship
+FLY_DIFF_THRESHOLD = 22          # grey-level change for a moving pixel
+FLY_MIN_AREA = 4                 # px, at a 320x240-equivalent scale
+FLY_MAX_PERSON_FRAC = 0.35       # blob area <= this x the median person box area
+FLY_START_NEAR = 1.0             # first sighting within this x person height of a person box
+FLY_MIN_OBS = 4                  # linked sightings before it can count
+FLY_MIN_TRAVEL = 1.5             # total travel >= this x the thrower's height
+FLY_MIN_SPEED = 0.3              # frame diagonals per second
+FLY_PERSON_MARGIN = 0.3          # blobs within this x box size of any person are limbs / box lag, not objects
+FLY_STEADY_COS = 0.6             # successive steps point the same way
+FLY_MAX_GAP_S = 0.6              # a track not seen this long is dropped
 PANIC_MIN_PEOPLE = 3
 PANIC_SPEED_RATIO = 2.5          # speed vs the person's own 10s baseline
 PANIC_BASELINE_S = 10.0
@@ -248,7 +266,10 @@ PANIC_SUSTAIN_S = 1.0
 PANIC_DISPERSE_MIN = 5           # crowd of at least this many (median over the baseline window)...
 PANIC_DISPERSE_FRAC = 0.5        # ...drops to at most this fraction of it...
 PANIC_DISPERSE_WINDOW_S = 4.0    # ...within this many seconds...
-PANIC_MOTION_RATIO = 2.0         # ...while frame motion is at least this x its recent median
+PANIC_MOTION_RATIO = 2.0         # ...while frame motion is at least this x its recent median,
+PANIC_DISPERSE_RUNNERS = 1       # ...or at least this many people are running (>= PANIC_MIN_SPEED): whole-frame
+                                 # motion hardly moves for a dozen small runners (UMN 44 s: 1.7x), running does
+SCENE_CUT_FRAC = 0.4             # more than this share of pixels changing at once = a cut / new source, not motion
 
 # --- Blind-spot tracking between linked cameras ---------------------------------
 GAP_ALERT_S = 60.0             # gap alert when longer than max(2 x link walking time, this)

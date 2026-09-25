@@ -371,8 +371,9 @@ class CameraBehaviour:
     speeds: Dict[int, Deque[Tuple[float, float]]] = field(default_factory=dict)
     panic_gate: SustainGate = field(default_factory=SustainGate)
     prev_gray: Optional[np.ndarray] = None
-    crowd_hist: Deque[Tuple[float, int, float]] = field(default_factory=deque)  # (ts, people, motion)
+    crowd_hist: Deque[Tuple[float, int, float, int]] = field(default_factory=deque)  # (ts, people, motion, runners)
     prev_small: Optional[np.ndarray] = None
+    flying: "FlyingObjects" = field(default_factory=lambda: FlyingObjects())
     blob_trails: Dict[int, List[Tuple[float, Tuple[float, float]]]] = field(default_factory=dict)
     overlays: List[Tuple[float, BehaviourEvent]] = field(default_factory=list)
 
@@ -410,7 +411,8 @@ class CameraBehaviour:
         sure_tracks = {tid: t for tid, t in tracks.items() if getattr(t, "conf", 1.0) >= thr}
         sure = {tid: o for tid, o in people.items() if tid not in tracks or tid in sure_tracks}
         if enabled("distress"):
-            events += self._dispersal(ts, len([t for t in sure_tracks.values() if t.cls_name == "person"]), gray)
+            events += self._dispersal(ts, len([t for t in sure_tracks.values() if t.cls_name == "person"]), gray,
+                                      runners=self._runners(sure_tracks, diag))
             events += self._hands_raised(ts, sure, weapon_recent)
             events += self._person_down(ts, people, tracks, frame_w=w, now_upright={
                 tid for tid, t in tracks.items() if getattr(t, "cls_name", "") == "person" and box_upright(t.bbox)})
@@ -476,32 +478,52 @@ class CameraBehaviour:
                                           [tid], box, label="PERSON DOWN"))
         return out
 
-    def _dispersal(self, ts, count, gray):
+    @staticmethod
+    def _runners(tracks, diag) -> int:
+        """People moving at running speed right now (frame diagonals / s)."""
+        n = 0
+        for t in tracks.values():
+            if t.cls_name != "person" or len(t.history) < 3:
+                continue
+            (t0, p0), (t1, p1) = t.history[-3], t.history[-1]
+            if t1 > t0 and math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / (t1 - t0) / diag >= config.PANIC_MIN_SPEED:
+                n += 1
+        return n
+
+    def _dispersal(self, ts, count, gray, runners=0):
         """Crowd dispersing: the count collapses while the scene's motion
-        spikes (see PANIC_DISPERSE_*)."""
+        spikes or people run (see PANIC_DISPERSE_*)."""
         motion = 0.0
         if gray is not None:
             small = cv2.resize(gray, (160, max(1, int(160 * gray.shape[0] / gray.shape[1]))))
             if self.prev_small is not None and self.prev_small.shape == small.shape:
-                motion = float(np.mean(cv2.absdiff(small, self.prev_small)))
+                diff = cv2.absdiff(small, self.prev_small)
+                if np.mean(diff > 40) > config.SCENE_CUT_FRAC:
+                    self.crowd_hist.clear()   # a cut or a new source: the old crowd did not "disperse"
+                    self.prev_small = small
+                    return []
+                motion = float(np.mean(diff))
             self.prev_small = small
         hist = self.crowd_hist
-        hist.append((ts, count, motion))
+        hist.append((ts, count, motion, runners))
         w = config.PANIC_DISPERSE_WINDOW_S
         while hist and hist[0][0] < ts - 3 * w:
             hist.popleft()
-        before = [c for t, c, _ in hist if ts - 2 * w <= t < ts - w]
-        recent = [c for t, c, _ in hist if t >= ts - 1.0]
-        calm = [m for t, _, m in hist if t < ts - w]
-        moving = [m for t, _, m in hist if t >= ts - w]
+        before = [c for t, c, _, _ in hist if ts - 2 * w <= t < ts - w]
+        recent = [c for t, c, _, _ in hist if t >= ts - 1.0]
+        calm = [m for t, _, m, _ in hist if t < ts - w]
+        moving = [m for t, _, m, _ in hist if t >= ts - w]
+        running = max((r for t, _, _, r in hist if t >= ts - w), default=0)
         if len(before) < 3 or not recent or len(calm) < 3 or not moving:
             return []
         base = float(np.median(before))
         collapsed = base >= config.PANIC_DISPERSE_MIN and max(recent) <= config.PANIC_DISPERSE_FRAC * base
-        spiked = max(moving) >= config.PANIC_MOTION_RATIO * max(float(np.median(calm)), 1.0)
+        spiked = (max(moving) >= config.PANIC_MOTION_RATIO * max(float(np.median(calm)), 1.0)
+                  or running >= config.PANIC_DISPERSE_RUNNERS)
         if collapsed and spiked and self._once((CROWD_PANIC,), ts):
+            why = f"{running} running" if running >= config.PANIC_DISPERSE_RUNNERS else "sudden motion"
             return [BehaviourEvent(CROWD_PANIC, f"Possible panic - crowd dispersing ({base:.0f} -> {max(recent)} people "
-                                                f"in {w:.0f}s, sudden motion)", [], None, label="PANIC")]
+                                                f"in {w:.0f}s, {why})", [], None, label="PANIC")]
         return []
 
     def _panic(self, ts, tracks, diag):
@@ -603,6 +625,16 @@ class CameraBehaviour:
                         out.append(self._throw_event("object", pid, None, hist[-1].bbox))
                     self.blob_trails.pop(pid, None)
             self.prev_gray = gray
+        # a small object flying away from someone, recognised or not (off: see FLY_ENABLED)
+        if gray is not None and config.FLY_ENABLED:
+            person_boxes = {tid: tuple(t.bbox) for tid, t in tracks.items()
+                            if t.cls_name == "person" and getattr(t, "conf", 1.0) >= config.DETECTOR_CONF_THRESHOLD}
+            for pid, start, end in self.flying.update(ts, gray, person_boxes, diag):
+                if self._once((THROW, "fly", pid), ts):
+                    centers = {q: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for q, b in person_boxes.items()}
+                    target = throw_target(start, end, centers, pid, restricted)
+                    x, y = end
+                    out.append(self._throw_event("object", pid, target, (x - 12, y - 12, x + 12, y + 12)))
         for oid in [o for o, t in self.object_last_seen.items() if ts - t > 3]:
             self.objects.pop(oid, None)
             self.object_last_seen.pop(oid, None)
@@ -612,6 +644,96 @@ class CameraBehaviour:
     def _throw_event(cls, thrower, target, bbox):
         msg = f"Object thrown: {cls}, by #{thrower}" + (f" {target}" if target else "")
         return BehaviourEvent(THROW, msg, [thrower], bbox, band="HIGH" if target else "MEDIUM", label="THROW")
+
+
+class FlyingObjects:
+    """Throw detection that does not need to recognise the object: a small
+    blob that moves in three consecutive analysed frames (double frame
+    differencing), outside every person box, first seen next to someone and
+    then travelling fast in a steady direction. Fires once per flight."""
+
+    def __init__(self):
+        self.frames: Deque[Tuple[float, np.ndarray]] = deque(maxlen=3)
+        self.tracks: List[dict] = []
+
+    @staticmethod
+    def _blobs(g0, g1, g2, person_boxes, scale):
+        d1 = cv2.absdiff(g1, g0) > config.FLY_DIFF_THRESHOLD
+        d2 = cv2.absdiff(g2, g1) > config.FLY_DIFF_THRESHOLD
+        m = (d1 & d2).astype(np.uint8)
+        if m.mean() > 0.05:            # lighting change / camera shake / cut
+            return []
+        m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+        n, _, stats, cents = cv2.connectedComponentsWithStats(m, 8)
+        areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in person_boxes]
+        max_area = config.FLY_MAX_PERSON_FRAC * float(np.median(areas)) if areas else 0.004 * m.size
+        out = []
+        for i in range(1, n):
+            a = stats[i, cv2.CC_STAT_AREA]
+            if a < config.FLY_MIN_AREA * scale or a > max_area:
+                continue
+            cx, cy = cents[i]
+            mx = config.FLY_PERSON_MARGIN
+            inside = any(b[0] - mx * (b[2] - b[0]) <= cx <= b[2] + mx * (b[2] - b[0])
+                         and b[1] - mx * (b[3] - b[1]) <= cy <= b[3] + mx * (b[3] - b[1]) for b in person_boxes)
+            if not inside:
+                out.append((float(cx), float(cy)))
+        return out
+
+    def update(self, ts, gray, person_boxes: Dict[int, Tuple[float, float, float, float]], diag):
+        """-> [(thrower_id, start, end)] for flights that just qualified."""
+        self.frames.append((ts, gray))
+        if len(self.frames) < 3 or not (self.frames[0][1].shape == self.frames[1][1].shape == gray.shape):
+            return []
+        (_, g0), (t1, g1), (_, g2) = self.frames
+        scale = gray.shape[0] * gray.shape[1] / (320.0 * 240.0)
+        boxes = list(person_boxes.values())
+        blobs = self._blobs(g0, g1, g2, boxes, scale)
+        self.tracks = [t for t in self.tracks if t1 - t["pts"][-1][0] <= config.FLY_MAX_GAP_S and not t.get("done")]
+        free = list(blobs)
+        for t in self.tracks:            # extend each track with its predicted next blob
+            (ta, pa) = t["pts"][-1]
+            if len(t["pts"]) >= 2:
+                (tb, pb) = t["pts"][-2]
+                v = ((pa[0] - pb[0]) / max(ta - tb, 1e-3), (pa[1] - pb[1]) / max(ta - tb, 1e-3))
+            else:
+                v = (0.0, 0.0)
+            pred = (pa[0] + v[0] * (t1 - ta), pa[1] + v[1] * (t1 - ta))
+            reach = max(0.15 * diag, 1.5 * math.hypot(*v) * (t1 - ta))
+            best = min(free, key=lambda p: math.hypot(p[0] - pred[0], p[1] - pred[1]), default=None)
+            if best is not None and math.hypot(best[0] - pred[0], best[1] - pred[1]) <= reach:
+                t["pts"].append((t1, best))
+                free.remove(best)
+        for p in free:                   # new flights start next to a person
+            near = None
+            for pid, b in person_boxes.items():
+                h = b[3] - b[1]
+                dx = max(b[0] - p[0], 0, p[0] - b[2]); dy = max(b[1] - p[1], 0, p[1] - b[3])
+                if math.hypot(dx, dy) <= config.FLY_START_NEAR * h:
+                    near = (pid, h)
+                    break
+            if near:
+                b = person_boxes[near[0]]
+                self.tracks.append({"pts": [(t1, p)], "pid": near[0], "h": near[1],
+                                    "origin": ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)})
+        out = []
+        for t in self.tracks:
+            pts = t["pts"]
+            if len(pts) < config.FLY_MIN_OBS:
+                continue
+            (t0, a), (tn, z) = pts[0], pts[-1]
+            travel = math.hypot(z[0] - a[0], z[1] - a[1])
+            speed = travel / max(tn - t0, 1e-3) / diag
+            steps = [(q[1][0] - p[1][0], q[1][1] - p[1][1]) for p, q in zip(pts, pts[1:])]
+            steady = all((u[0] * w[0] + u[1] * w[1]) / max(math.hypot(*u) * math.hypot(*w), 1e-6) >= config.FLY_STEADY_COS
+                         for u, w in zip(steps, steps[1:]))
+            o = t["origin"]
+            dists = [math.hypot(p[1][0] - o[0], p[1][1] - o[1]) for p in pts]
+            leaving = all(b > a for a, b in zip(dists, dists[1:]))   # always moving away from the thrower
+            if travel >= config.FLY_MIN_TRAVEL * t["h"] and speed >= config.FLY_MIN_SPEED and steady and leaving:
+                t["done"] = True
+                out.append((t["pid"], a, z))
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +760,7 @@ class BehaviourEngine:
         self._model = None
         self.cameras: Dict[str, CameraBehaviour] = {}
         self._last_pose: Dict[str, float] = {}
+        self._sources: Dict[str, object] = {}
 
     def _ensure(self):
         if self._model is None:
@@ -647,6 +770,12 @@ class BehaviourEngine:
             audit("MODEL_LOADED", f"behaviour: {config.POSE_MODEL}")
 
     def on_frame(self, camera, frame, annotated):
+        # A new source is a new scene: start its behaviour history from scratch.
+        source = getattr(camera, "source", None)
+        if self._sources.get(camera.id, source) != source:
+            self.cameras.pop(camera.id, None)
+            self.fights.state.pop(camera.id, None)
+        self._sources[camera.id] = source
         state = self.cameras.setdefault(camera.id, CameraBehaviour())
         tracks = getattr(camera.pipeline, "last_tracks", {}) or {}
         now = time.time()

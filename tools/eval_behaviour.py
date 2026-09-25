@@ -88,7 +88,7 @@ CLOCK0 = 1_000_000.0
 _EMBEDDER = None
 
 
-def run_clip(shared, path: Path, fps_hint=None, hold_last_s=0.0, upscale_to=None):
+def run_clip(shared, path: Path, fps_hint=None, hold_last_s=0.0, upscale_to=None, proc_fps=None, offset_s=0.0):
     global _EMBEDDER
     if _EMBEDDER is None:
         from backend.search import ClipEmbedder
@@ -101,12 +101,13 @@ def run_clip(shared, path: Path, fps_hint=None, hold_last_s=0.0, upscale_to=None
     engine = behavior.BehaviourEngine(shared._lock, alerts, embedder=_EMBEDDER)
     cam = types.SimpleNamespace(id="bench", pipeline=types.SimpleNamespace(
         last_tracks={}, zone_store=types.SimpleNamespace(list=lambda: [])))
-    next_t, n, seconds = 0.0, 0, 0.0
+    rate = proc_fps or PROC_FPS
+    next_t, n, seconds = offset_s, 0, 0.0
     for ts, frame, fps in frames(path, fps_hint, hold_last_s):
         seconds = ts
         if ts + 1e-6 < next_t:
             continue
-        next_t = ts + 1.0 / PROC_FPS
+        next_t = ts + 1.0 / rate
         clock["t"] = CLOCK0 + ts
         if upscale_to and frame.shape[1] < upscale_to:
             s = upscale_to / frame.shape[1]
