@@ -378,6 +378,81 @@ def _hosts_in_use() -> set:
     return {h for h in (_stream_host(c.source) for c in app_state.manager.list() if isinstance(c.source, str)) if h}
 
 
+# ---------- site plan + camera links ----------
+SITEPLAN_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml",
+                  ".webp": "image/webp"}
+
+
+def _siteplan_file() -> Optional[Path]:
+    for ext in SITEPLAN_TYPES:
+        path = config.SITEPLAN_BASENAME.with_suffix(ext)
+        if path.exists():
+            return path
+    return None
+
+
+@app.get("/api/siteplan")
+def get_siteplan():
+    path = _siteplan_file()
+    if path is None:
+        raise HTTPException(status_code=404, detail="No site plan uploaded (the dashboard uses its built-in plan)")
+    return FileResponse(path, media_type=SITEPLAN_TYPES[path.suffix], headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/siteplan")
+async def upload_siteplan(file: UploadFile = File(...)):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in SITEPLAN_TYPES:
+        raise HTTPException(status_code=400, detail=f"Site plan must be one of {', '.join(SITEPLAN_TYPES)}")
+    old = _siteplan_file()
+    if old:
+        old.unlink()
+    dest = config.SITEPLAN_BASENAME.with_suffix(ext)
+    with dest.open("wb") as out:
+        shutil.copyfileobj(file.file, out)
+    audit("SITEPLAN_UPLOADED", f"{file.filename} ({dest.stat().st_size} bytes)", actor="operator")
+    return {"ok": True}
+
+
+@app.delete("/api/siteplan")
+def delete_siteplan():
+    path = _siteplan_file()
+    if path:
+        path.unlink()
+        audit("SITEPLAN_REMOVED", "back to the built-in plan", actor="operator")
+    return {"ok": True}
+
+
+class LinkIn(BaseModel):
+    a: str
+    b: str
+    seconds: float = Field(..., gt=0, le=3600)
+
+
+@app.get("/api/links")
+def list_links():
+    return app_state.manager.links
+
+
+@app.post("/api/links")
+def save_link(body: LinkIn):
+    try:
+        return app_state.manager.set_link(body.a, body.b, body.seconds)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"No camera {exc.args[0]}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/links/{link_id}")
+def delete_link(link_id: str):
+    try:
+        app_state.manager.remove_link(link_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="No such link")
+    return {"ok": True}
+
+
 @app.patch("/api/cameras/{cam_id}")
 def patch_camera(cam_id: str, body: CameraPatch):
     _camera_or_404(cam_id)

@@ -229,6 +229,22 @@ class AlertManager:
                 and (band is None or a.band == band)
             )
 
+    def camera_summary(self, camera_id: str) -> dict:
+        """Worst band and latest message among a camera's unacknowledged alerts
+        (map marker colour + popup)."""
+        order = {"CRITICAL": 3, "HIGH": 2, "MEDIUM": 1, "LOW": 0}
+        with self._lock:
+            active = [a for a in self._alerts if a.camera_id == camera_id and a.acknowledged_at is None]
+        if not active:
+            return {"worst_alert": None, "latest_alert": None}
+        worst = max(active, key=lambda a: (order.get(a.band, 0), a.timestamp))
+        latest = max(active, key=lambda a: a.timestamp)
+        return {
+            "worst_alert": worst.band,
+            "latest_alert": {"id": latest.id, "message": latest.message, "band": latest.band,
+                             "created_at": latest.timestamp},
+        }
+
     def total_count(self) -> int:
         with self._lock:
             return self._total_count

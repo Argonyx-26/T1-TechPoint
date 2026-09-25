@@ -119,6 +119,7 @@ RECONNECT_INITIAL_S = 3.0      # first retry after a stream drops...
 RECONNECT_MAX_S = 30.0         # ...doubling up to this
 OFFLINE_AFTER_S = 30.0         # "reconnecting" becomes "offline since HH:MM" after this long
 CAMERAS_FILE = DATA_DIR / "cameras.json"
+SITEPLAN_BASENAME = DATA_DIR / "siteplan"   # uploaded floor plan: data/siteplan.<ext>
 STREAM_TIMEOUT_S = 5.0         # network streams: open/read timeout before a reconnect
 CAMERA_TEST_TIMEOUT_S = 3.0    # "TEST" in the add-camera dialog must grab a frame within this
 DISCOVER_TIMEOUT_S = 1.0       # per-host connect/read timeout when scanning the /24 for phones

@@ -130,7 +130,7 @@ def test_cameras_persist_and_restore_stopped(tmp_path, manager):
     assert all(c.status == "stopped" for c in restored.list())
     assert restored.get("cam-1").location.x == 0.2
     assert restored.get("cam-2").location.label == "Lobby East"
-    assert restored.links == [{"a": "cam-1", "b": "cam-2", "seconds": 20}]
+    assert restored.links == [{"id": "cam-1~cam-2", "a": "cam-1", "b": "cam-2", "seconds": 20}]
 
 
 def test_removing_a_camera_drops_its_links(manager):
@@ -150,3 +150,41 @@ def test_thresholds_apply_to_every_camera_including_new_ones(manager):
 
 def test_location_defaults_to_camera_name():
     assert Location.from_dict(None, "Gate").label == "Gate"
+
+
+def test_links_are_unordered_validated_and_persisted(tmp_path, manager):
+    add(manager, "Gate"), add(manager, "Lobby"), add(manager, "Parking")
+    manager.set_link("cam-2", "cam-1", 20)
+    manager.set_link("cam-1", "cam-2", 25)  # same pair: replaces, not duplicates
+    assert [(l["id"], l["seconds"]) for l in manager.links] == [("cam-1~cam-2", 25.0)]
+    assert manager.expected_seconds("cam-2", "cam-1") == 25.0
+    assert manager.expected_seconds("cam-1", "cam-3") is None
+    with pytest.raises(ValueError):
+        manager.set_link("cam-1", "cam-1", 5)
+    with pytest.raises(KeyError):
+        manager.set_link("cam-1", "cam-9", 5)
+    restored = CameraManager(shared=FakeShared(), store_path=tmp_path / "cameras.json",
+                             zones_dir=tmp_path, primary_zone_file=tmp_path / "zones.json")
+    assert restored.expected_seconds("cam-1", "cam-2") == 25.0
+    manager.remove_link("cam-1~cam-2")
+    assert manager.links == []
+
+
+def test_camera_reports_worst_and_latest_alert(manager):
+    gate = add(manager, "Gate")
+    gate.pipeline.zone_store.replace_all(
+        [Zone(id="v", name="Vault", polygon=[(0, 0), (1, 0), (1, 1), (0, 1)], restricted=True)])
+    assert gate.to_dict()["worst_alert"] is None
+    for _ in range(6):
+        run_frame(gate, [person(1, 320, 240)])
+    info = gate.to_dict()
+    assert info["worst_alert"] == "HIGH"
+    assert "restricted zone" in info["latest_alert"]["message"]
+
+
+def test_removed_camera_zones_do_not_leak_to_a_new_camera(manager):
+    first = add(manager, "Old gate")
+    first.pipeline.zone_store.replace_all(
+        [Zone(id="v", name="Vault", polygon=[(0, 0), (1, 0), (1, 1), (0, 1)], restricted=True)])
+    manager.remove("cam-1")
+    assert add(manager, "New gate").pipeline.zone_store.list() == []

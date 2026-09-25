@@ -424,6 +424,7 @@ class Camera:
             "zone_counts": dict(self.pipeline.rule_engine.zone_counts) if self.status == STATUS_ONLINE else {},
             "location": self.location.to_dict(),
             "weapon_detector_enabled": self.shared.weapon.enabled,
+            **self.pipeline.alert_manager.camera_summary(self.id),
         }
 
     def persist_dict(self) -> dict:
@@ -476,11 +477,16 @@ class CameraManager:
         except (OSError, ValueError):
             return
         for c in data.get("cameras", []):
+            if not isinstance(c, dict) or "id" not in c:
+                continue
             try:
                 self._create(c["id"], c["name"], c["source"], Location.from_dict(c.get("location"), c["name"]))
             except Exception as exc:
                 print(f"[cameras] could not restore {c}: {exc}")
-        self.links = data.get("links", [])
+        self.links = [
+            {**l, "id": self.link_id(l["a"], l["b"])} for l in data.get("links", [])
+            if l.get("a") in self.cameras and l.get("b") in self.cameras
+        ]
 
     def save(self):
         with self._lock:
@@ -562,6 +568,8 @@ class CameraManager:
                 raise KeyError(cam_id)
             self.links = [l for l in self.links if cam_id not in (l.get("a"), l.get("b"))]
         camera.stop()
+        # A camera's zones belong to it: a new camera reusing this id starts clean.
+        camera.pipeline.zone_store.replace_all([])
         self.save()
         audit("CAMERA_REMOVED", f"{camera.code} {camera.name}", actor="operator", camera_id=cam_id)
 
@@ -571,6 +579,43 @@ class CameraManager:
 
     def list(self) -> List[Camera]:
         return sorted(self.cameras.values(), key=lambda c: c.number)
+
+    # -- links (expected walking time between cameras; Phase 7 uses them) ---------
+    @staticmethod
+    def link_id(a: str, b: str) -> str:
+        return "~".join(sorted((a, b)))
+
+    def set_link(self, a: str, b: str, seconds: float) -> dict:
+        if a == b:
+            raise ValueError("A link needs two different cameras")
+        for cam_id in (a, b):
+            if cam_id not in self.cameras:
+                raise KeyError(cam_id)
+        if seconds <= 0:
+            raise ValueError("Walking time must be positive")
+        link = {"id": self.link_id(a, b), "a": a, "b": b, "seconds": float(seconds)}
+        with self._lock:
+            self.links = [l for l in self.links if self.link_id(l["a"], l["b"]) != link["id"]] + [link]
+        self.save()
+        audit("LINK_SAVED", f"{self.cameras[a].code} <-> {self.cameras[b].code}: {seconds:g}s walk", actor="operator")
+        return link
+
+    def remove_link(self, link_id: str):
+        with self._lock:
+            before = len(self.links)
+            self.links = [l for l in self.links if self.link_id(l["a"], l["b"]) != link_id]
+            removed = before != len(self.links)
+        if not removed:
+            raise KeyError(link_id)
+        self.save()
+        audit("LINK_REMOVED", link_id, actor="operator")
+
+    def expected_seconds(self, a: str, b: str) -> Optional[float]:
+        lid = self.link_id(a, b)
+        for l in self.links:
+            if self.link_id(l["a"], l["b"]) == lid:
+                return float(l["seconds"])
+        return None
 
     def update_thresholds(self, **values):
         self.thresholds.update(values)

@@ -812,6 +812,56 @@ textarea:focus {
     border-radius: var(--radius-md);
 }
 
+/* site map */
+.map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.map-toolbar select { background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-primary); padding: 8px 10px; font-size: 11px; }
+.map-mode { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.map-mode button { background: transparent; border: 0; color: var(--text-muted); padding: 8px 12px; font-size: 10px;
+    font-weight: 700; letter-spacing: 1px; cursor: pointer; }
+.map-mode button.active { background: rgba(248, 215, 148, .14); color: var(--khaki); }
+.map-hint { margin: 0 22px 10px; min-height: 16px; font-family: var(--font-mono); font-size: 10px; color: var(--khaki); }
+.map-stage { position: relative; margin: 0 22px 14px; border-radius: var(--radius-md); overflow: hidden;
+    border: 1px solid var(--border); background: var(--noir); aspect-ratio: 16 / 10; }
+.site-plan, .street-map { position: absolute; inset: 0; }
+.site-plan img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: .85; }
+.site-plan svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.site-plan.placing, .street-map.placing { cursor: crosshair; }
+.plan-marker { cursor: pointer; }
+/* Only markers take clicks; everything else lets them through to the SVG. */
+#sitePlanSvg > :not(.plan-marker) { pointer-events: none; }
+.plan-marker text { font-family: var(--font-mono); font-size: 18px; font-weight: 700; fill: #f2ecdd;
+    paint-order: stroke; stroke: #111a19; stroke-width: 4px; }
+.pulse-ring { animation: ringPulse 1.1s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes ringPulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+.plan-marker.flash circle.core { animation: flashCore .45s ease-in-out 6; }
+@keyframes flashCore { 50% { r: 20; } }
+.map-popup { position: absolute; z-index: 5; width: 230px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-pop); padding: 10px; font-size: 11px; color: var(--text-primary); }
+.map-popup img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-sm); background: #080d0c; margin: 6px 0; }
+.map-popup .pop-title { font-weight: 800; font-size: 12px; color: var(--khaki); }
+.map-popup .pop-meta { color: var(--text-muted); font-family: var(--font-mono); font-size: 9px; }
+.map-popup .pop-alert { margin-top: 4px; font-size: 10px; }
+.map-popup .pop-actions { display: flex; gap: 6px; margin-top: 8px; }
+.map-popup .pop-actions button, .map-popup .pop-actions a { flex: 1; text-align: center; font-size: 9px; padding: 6px; }
+.leaflet-popup-content .map-popup { position: static; box-shadow: none; border: 0; padding: 0; width: 220px; background: transparent; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text-primary); }
+.street-dot { position: relative; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #111a19;
+    display: flex; align-items: center; justify-content: center; font: 700 8px var(--font-mono); color: #111a19; }
+.street-dot.critical::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 3px solid #ef5a3a;
+    animation: ringPulse 1.1s ease-out infinite; }
+.street-dot.flash { animation: flashCore .45s ease-in-out 6; }
+.link-label { font-family: var(--font-mono); font-size: 16px; font-weight: 700; fill: var(--khaki);
+    paint-order: stroke; stroke: #111a19; stroke-width: 4px; }
+.links-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 22px 18px; }
+.link-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 999px; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+.link-chip button { background: none; border: 0; color: var(--text-muted); cursor: pointer; }
+.alert-location { display: flex; gap: 8px; align-items: center; font-size: 10px; color: var(--text-muted); margin-bottom: 6px; }
+.nav-link { color: var(--khaki); font-size: 10px; font-weight: 700; letter-spacing: .5px; text-decoration: none; }
+.nav-link:hover { text-decoration: underline; }
+.modal-location { margin: -8px 22px 14px; font-size: 11px; color: var(--text-muted); }
+
 /* add-camera dialog */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 22px 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
@@ -1491,6 +1541,9 @@ textarea:focus {
 }
 </style>
 
+    <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+    <script src="/static/vendor/leaflet/leaflet.js"></script>
+
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet"
@@ -1672,6 +1725,37 @@ textarea:focus {
                     </div>
                 </div>
                 <div class="camera-wall count-1" id="cameraWall"></div>
+            </section>
+
+            <!-- SITE MAP -->
+            <section class="panel site-map-panel" id="siteMapPanel">
+                <div class="panel-header">
+                    <div>
+                        <span class="section-kicker">SITUATIONAL AWARENESS</span>
+                        <h2>Site Map</h2>
+                    </div>
+                    <div class="map-toolbar">
+                        <div class="map-mode">
+                            <button type="button" id="modePlan" class="active">SITE PLAN</button>
+                            <button type="button" id="modeStreet">STREET MAP</button>
+                        </div>
+                        <select id="mapCameraSelect" title="Camera to place"></select>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="placeCameraBtn">PLACE</button>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="linkCamerasBtn">LINK</button>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="uploadPlanBtn">UPLOAD PLAN</button>
+                        <input type="file" id="planFile" accept=".png,.jpg,.jpeg,.svg,.webp" hidden>
+                    </div>
+                </div>
+                <div class="map-hint" id="mapHint"></div>
+                <div class="map-stage" id="mapStage">
+                    <div class="site-plan" id="sitePlan">
+                        <img id="sitePlanImg" alt="" class="hidden">
+                        <svg id="sitePlanSvg" viewBox="0 0 1000 625" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"></svg>
+                        <div class="map-popup hidden" id="planPopup"></div>
+                    </div>
+                    <div class="street-map hidden" id="streetMap"></div>
+                </div>
+                <div class="links-list" id="linksList"></div>
             </section>
 
             <!-- SOURCE CONTROL -->
@@ -2140,6 +2224,7 @@ textarea:focus {
         </div>
 
         <p class="modal-message" id="modalMessage"></p>
+        <p class="modal-location" id="modalLocation"></p>
 
         <div class="modal-details">
 
@@ -2607,6 +2692,12 @@ async function loadAlerts() {
             const newCritical =
                 fresh.filter(a => a.band === "CRITICAL" && !seenAlertIds.has(a.id));
 
+            const order = { critical: 3, high: 2, medium: 1, low: 0 };
+            const newest = fresh
+                .filter(a => !seenAlertIds.has(a.id) && a.camera_id)
+                .sort((x, y) => (order[y.severity] ?? 0) - (order[x.severity] ?? 0))[0];
+            if (newest) mapFlyToCamera(newest.camera_id);
+
             fresh.forEach(a => seenAlertIds.add(a.id));
 
             if (newCritical.length) {
@@ -2682,6 +2773,8 @@ function renderAlerts() {
                 ${escapeHTML(alert.message || "Potential security event detected.")}
             </div>
 
+            ${alertLocation(alert).label ? `<div class="alert-location">&#128205; ${escapeHTML(alertLocation(alert).label)}${navigateUrl(alertLocation(alert)) ? ` <a class="nav-link" href="${navigateUrl(alertLocation(alert))}" target="_blank" rel="noopener">NAVIGATE</a>` : ""}</div>` : ""}
+
             <div class="alert-time">
                 ${escapeHTML(formatAlertTime(alert) + zone)}
                 ${alert.score != null ? ` • SCORE ${alert.score}` : ""}
@@ -2689,7 +2782,8 @@ function renderAlerts() {
 
         `;
 
-        item.addEventListener("click", () => {
+        item.addEventListener("click", event => {
+            if (event.target.closest("a")) return;  // Navigate opens Google Maps, not the modal
             openEvidence(alert);
         });
 
@@ -2720,6 +2814,12 @@ function openEvidence(alert) {
     document.getElementById("modalTime").textContent = formatAlertTime(alert);
     document.getElementById("modalMessage").textContent =
         (alert.message || "") + (alert.zone_name ? ` - zone: ${alert.zone_name}` : "");
+    const loc = alertLocation(alert);
+    const nav = navigateUrl(loc);
+    document.getElementById("modalLocation").innerHTML = loc.label
+        ? `&#128205; ${escapeHTML(loc.label)}${alert.camera_code ? ` (${escapeHTML(alert.camera_code)})` : ""}` +
+          (nav ? ` &middot; <a class="nav-link" href="${nav}" target="_blank" rel="noopener">NAVIGATE</a>` : "")
+        : "";
 
     if (alert.has_evidence) {
 
@@ -3105,7 +3205,8 @@ function pollSnapshots(img, camId, intervalMs, alive) {
     };
     img.onload = () => setTimeout(next, intervalMs);
     img.onerror = () => setTimeout(next, 1000);
-    next();
+    // Start on the next tick: a new tile isn't in the page until its builder returns.
+    setTimeout(next, 0);
 }
 let cameras = [];
 const cameraTiles = new Map();
@@ -3359,6 +3460,7 @@ async function loadCameras() {
     }
     renderCameraWall();
     updateFocusedUI();
+    renderMap();
 }
 
 
@@ -3507,6 +3609,525 @@ document.getElementById("camSaveBtn").addEventListener("click", async () => {
         showToast(error.message);
     }
 });
+
+
+/* =========================================
+   SITE MAP
+   A) SITE PLAN (default, offline): uploaded floor
+      plan or the built-in plan; cameras at
+      normalized (x, y) with a view-direction cone.
+   B) STREET MAP: vendored Leaflet + OpenStreetMap
+      tiles; falls back to A when tiles can't load.
+========================================= */
+
+const MAP_COLORS = { none: "#6fbf73", LOW: "#6fbf73", MEDIUM: "#F8D794", HIGH: "#e8913a", CRITICAL: "#ef5a3a", offline: "#6b7470" };
+const PLAN_W = 1000, PLAN_H = 625;
+const svgNS = "http://www.w3.org/2000/svg";
+
+let mapMode = "plan";
+let mapAction = null;        // {kind: "place"|"place-heading"|"link", ...}
+let links = [];
+let planPopupCamId = null;
+let leafletMap = null;
+const leafletMarkers = new Map();
+let leafletLinkLayer = null;
+let leafletRouteLayer = null;
+let tilesLoaded = 0, tileErrors = 0;
+let hasUploadedPlan = false;
+let routeOverlay = null;     // Phase 6/7: [{cam_id, label, color, dashed}]
+let lastMapFly = 0;
+let lastPlanHTML = "";
+
+function markerColor(cam) {
+    if (cam.status !== "online") return MAP_COLORS.offline;
+    return MAP_COLORS[cam.worst_alert || "none"];
+}
+
+function navigateUrl(loc) {
+    return loc && loc.lat != null && loc.lng != null
+        ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : null;
+}
+
+// An alert keeps the location its camera had when it fired; if that had no
+// coordinates yet, use the camera's current ones (the camera hasn't moved).
+function alertLocation(alert) {
+    const loc = alert.location || {};
+    const cam = cameras.find(c => c.id === alert.camera_id);
+    if ((loc.lat == null || loc.lng == null) && cam?.location?.lat != null) {
+        return { ...loc, lat: cam.location.lat, lng: cam.location.lng, label: loc.label || cam.location.label };
+    }
+    return loc;
+}
+
+function setMapHint(text) {
+    document.getElementById("mapHint").textContent = text || "";
+}
+
+function builtinPlanSVG() {
+    // A neutral placeholder floor plan: outer wall, corridor, rooms.
+    const room = (x, y, w, h, label) => `
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(128,144,118,.07)" stroke="#3a5850" stroke-width="3"/>
+        <text x="${x + 14}" y="${y + 30}" fill="#647163" font-family="monospace" font-size="18" letter-spacing="2">${label}</text>`;
+    return `<g class="builtin-plan">
+        <rect x="20" y="20" width="960" height="585" fill="none" stroke="#3a5850" stroke-width="6"/>
+        ${room(40, 40, 300, 240, "MAIN GATE")}
+        ${room(360, 40, 280, 240, "LOBBY")}
+        ${room(660, 40, 300, 240, "OFFICE")}
+        ${room(40, 380, 420, 205, "PARKING")}
+        ${room(480, 380, 480, 205, "HALL")}
+        <rect x="40" y="300" width="920" height="60" fill="rgba(248,215,148,.04)" stroke="#3a5850" stroke-dasharray="10 8" stroke-width="2"/>
+        <text x="60" y="338" fill="#647163" font-family="monospace" font-size="16" letter-spacing="2">CORRIDOR B</text>
+        <text x="980" y="600" text-anchor="end" fill="#3a5850" font-family="monospace" font-size="13">BUILT-IN PLAN - UPLOAD YOURS</text>
+    </g>`;
+}
+
+function planPoint(cam) {
+    const loc = cam.location || {};
+    return loc.x != null && loc.y != null ? { x: loc.x * PLAN_W, y: loc.y * PLAN_H } : null;
+}
+
+function conePath(x, y, headingDeg, radius = 90, spread = 30) {
+    const a1 = (headingDeg - spread) * Math.PI / 180, a2 = (headingDeg + spread) * Math.PI / 180;
+    return `M ${x} ${y} L ${x + radius * Math.cos(a1)} ${y + radius * Math.sin(a1)} ` +
+           `A ${radius} ${radius} 0 0 1 ${x + radius * Math.cos(a2)} ${y + radius * Math.sin(a2)} Z`;
+}
+
+function renderSitePlan() {
+    const svg = document.getElementById("sitePlanSvg");
+    let html = hasUploadedPlan ? "" : builtinPlanSVG();
+
+    // camera links with expected walking time
+    links.forEach(link => {
+        const a = cameras.find(c => c.id === link.a), b = cameras.find(c => c.id === link.b);
+        const pa = a && planPoint(a), pb = b && planPoint(b);
+        if (!pa || !pb) return;
+        html += `<line x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}" stroke="#F8D794" stroke-width="3" stroke-opacity=".6"/>
+                 <text class="link-label" x="${(pa.x + pb.x) / 2}" y="${(pa.y + pb.y) / 2 - 8}" text-anchor="middle">${escapeHTML(link.label || link.seconds + "s")}</text>`;
+    });
+
+    // subject route (Ask Vigil / Movement Log)
+    if (routeOverlay && routeOverlay.length > 1) {
+        for (let i = 1; i < routeOverlay.length; i++) {
+            const a = cameras.find(c => c.id === routeOverlay[i - 1].cam_id);
+            const b = cameras.find(c => c.id === routeOverlay[i].cam_id);
+            const pa = a && planPoint(a), pb = b && planPoint(b);
+            if (!pa || !pb) continue;
+            const seg = routeOverlay[i];
+            html += `<line x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}" stroke="${seg.color || "#5fd3e6"}" stroke-width="5" stroke-dasharray="14 10"/>
+                     <text class="link-label" x="${(pa.x + pb.x) / 2}" y="${(pa.y + pb.y) / 2 + 22}" text-anchor="middle" style="fill:${seg.color || "#5fd3e6"}">${escapeHTML(seg.label || "")}</text>`;
+        }
+        routeOverlay.forEach(stop => {
+            const cam = cameras.find(c => c.id === stop.cam_id);
+            const pt = cam && planPoint(cam);
+            if (pt && stop.time) html += `<text class="link-label" x="${pt.x}" y="${pt.y + 40}" text-anchor="middle" style="fill:#5fd3e6;font-size:13px">${escapeHTML(stop.time)}</text>`;
+        });
+    }
+
+    cameras.forEach(cam => {
+        const pt = planPoint(cam);
+        if (!pt) return;
+        const color = markerColor(cam);
+        const heading = cam.location?.heading;
+        const critical = cam.worst_alert === "CRITICAL";
+        html += `<g class="plan-marker" data-cam="${cam.id}">
+            ${heading != null ? `<path d="${conePath(pt.x, pt.y, heading)}" fill="${color}" fill-opacity=".22" stroke="${color}" stroke-opacity=".6"/>` : ""}
+            ${critical ? `<circle class="pulse-ring" cx="${pt.x}" cy="${pt.y}" r="14" fill="none" stroke="${MAP_COLORS.CRITICAL}" stroke-width="4"/>` : ""}
+            <circle class="core" cx="${pt.x}" cy="${pt.y}" r="14" fill="${color}" stroke="#111a19" stroke-width="3"/>
+            <text x="${pt.x + 20}" y="${pt.y + 6}">${escapeHTML(cam.code)} ${escapeHTML(cam.location?.label || cam.name)}</text>
+        </g>`;
+    });
+    // Rebuilding the SVG under the pointer drops clicks (mouse-down on a node
+    // replaced before mouse-up), so only touch the DOM when something changed.
+    if (html === lastPlanHTML) {
+        if (planPopupCamId) showPlanPopup(planPopupCamId, false);
+        return;
+    }
+    lastPlanHTML = html;
+    svg.innerHTML = html;
+    svg.querySelectorAll(".plan-marker").forEach(g => {
+        g.addEventListener("click", event => {
+            // While placing, a click on a marker or its label is a plan click.
+            if (mapAction && mapAction.kind !== "link") return;
+            event.stopPropagation();
+            onMarkerClick(g.dataset.cam);
+        });
+    });
+    if (planPopupCamId) showPlanPopup(planPopupCamId, false);
+}
+
+function popupHTML(cam) {
+    const loc = cam.location || {};
+    const nav = navigateUrl(loc);
+    const latest = cam.latest_alert;
+    const counts = Object.entries(cam.object_counts || {}).map(([k, v]) => `${v} ${k}`).join(", ") || "no objects";
+    return `<div class="map-popup">
+        <div class="pop-title">${escapeHTML(cam.code)} ${escapeHTML(cam.name)}</div>
+        <div class="pop-meta">${escapeHTML(loc.label || "")} &middot; ${escapeHTML(camStatusLabel(cam).text)}</div>
+        <img src="/api/cameras/${encodeURIComponent(cam.id)}/snapshot?t=${Date.now()}" alt="live thumbnail" onerror="this.style.visibility='hidden'">
+        <div class="pop-meta">${escapeHTML(counts)}</div>
+        <div class="pop-alert">${latest ? `<b style="color:${MAP_COLORS[latest.band]}">${escapeHTML(latest.band)}</b> ${escapeHTML(latest.message)}` : "No active alerts"}</div>
+        <div class="pop-actions">
+            <button class="primary-btn pop-focus" data-cam="${cam.id}">FOCUS</button>
+            ${nav ? `<a class="secondary-btn nav-link" href="${nav}" target="_blank" rel="noopener">NAVIGATE</a>` : ""}
+        </div>
+    </div>`;
+}
+
+function showPlanPopup(camId, fresh = true) {
+    const cam = cameras.find(c => c.id === camId);
+    const popup = document.getElementById("planPopup");
+    const pt = cam && planPoint(cam);
+    if (!pt) {
+        popup.classList.add("hidden");
+        planPopupCamId = null;
+        return;
+    }
+    planPopupCamId = camId;
+    const stage = document.getElementById("sitePlan").getBoundingClientRect();
+    const px = pt.x / PLAN_W * stage.width, py = pt.y / PLAN_H * stage.height;
+    if (fresh || popup.classList.contains("hidden")) {
+        popup.innerHTML = popupHTML(cam).replace('<div class="map-popup">', "").replace(/<\/div>$/, "");
+        popup.querySelector(".pop-focus").addEventListener("click", () => focusCamera(camId));
+    }
+    popup.style.left = `${Math.min(Math.max(8, px + 18), stage.width - 240)}px`;
+    popup.style.top = `${Math.min(Math.max(8, py - 60), stage.height - 260)}px`;
+    popup.classList.remove("hidden");
+}
+
+function onMarkerClick(camId) {
+    if (mapAction && mapAction.kind === "link") {
+        linkClick(camId);
+        return;
+    }
+    if (mapMode === "plan") showPlanPopup(camId);
+}
+
+// ----- street map -----
+function initStreetMap() {
+    if (leafletMap || typeof L === "undefined") return;
+    leafletMap = L.map("streetMap", { zoomControl: true, attributionControl: true }).setView([20, 0], 2);
+    const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+    });
+    tiles.on("tileload", () => { tilesLoaded++; });
+    tiles.on("tileerror", () => { tileErrors++; });
+    tiles.addTo(leafletMap);
+    leafletLinkLayer = L.layerGroup().addTo(leafletMap);
+    leafletRouteLayer = L.layerGroup().addTo(leafletMap);
+    leafletMap.on("click", event => {
+        if (mapAction && mapAction.kind === "place") {
+            placeCameraAt({ lat: +event.latlng.lat.toFixed(6), lng: +event.latlng.lng.toFixed(6) });
+        }
+    });
+}
+
+function streetIcon(cam) {
+    const critical = cam.worst_alert === "CRITICAL";
+    return L.divIcon({
+        className: "",
+        html: `<div class="street-dot${critical ? " critical" : ""}" style="background:${markerColor(cam)}">${String(cam.number || cam.code.slice(-2))}</div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
+    });
+}
+
+function renderStreetMap(fit = false) {
+    if (!leafletMap) return;
+    const seen = new Set();
+    cameras.forEach(cam => {
+        const loc = cam.location || {};
+        if (loc.lat == null || loc.lng == null) return;
+        seen.add(cam.id);
+        let marker = leafletMarkers.get(cam.id);
+        if (!marker) {
+            marker = L.marker([loc.lat, loc.lng], { icon: streetIcon(cam) }).addTo(leafletMap);
+            marker.on("click", () => {
+                if (mapAction && mapAction.kind === "link") {
+                    linkClick(cam.id);
+                    return;
+                }
+                marker.bindPopup(popupHTML(cameras.find(c => c.id === cam.id) || cam)).openPopup();
+            });
+            leafletMarkers.set(cam.id, marker);
+        }
+        marker.setLatLng([loc.lat, loc.lng]);
+        marker.setIcon(streetIcon(cam));
+        marker.bindTooltip(`${cam.code} ${loc.label || cam.name}`);
+    });
+    for (const [id, marker] of leafletMarkers) {
+        if (!seen.has(id)) {
+            marker.remove();
+            leafletMarkers.delete(id);
+        }
+    }
+    leafletLinkLayer.clearLayers();
+    links.forEach(link => {
+        const a = cameras.find(c => c.id === link.a)?.location, b = cameras.find(c => c.id === link.b)?.location;
+        if (!a || !b || a.lat == null || b.lat == null) return;
+        L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: "#F8D794", weight: 3, opacity: .7 })
+            .bindTooltip(link.label || `${link.seconds}s`, { permanent: true, direction: "center" })
+            .addTo(leafletLinkLayer);
+    });
+    leafletRouteLayer.clearLayers();
+    if (routeOverlay && routeOverlay.length > 1) {
+        const pts = routeOverlay.map(r => cameras.find(c => c.id === r.cam_id)?.location).filter(l => l && l.lat != null);
+        if (pts.length > 1) {
+            L.polyline(pts.map(l => [l.lat, l.lng]), { color: "#5fd3e6", weight: 5, dashArray: "12 10" }).addTo(leafletRouteLayer);
+        }
+    }
+    if (fit) {
+        const placed = cameras.map(c => c.location).filter(l => l && l.lat != null);
+        if (placed.length) leafletMap.fitBounds(placed.map(l => [l.lat, l.lng]), { maxZoom: 18, padding: [40, 40] });
+    }
+}
+
+function setMapMode(mode) {
+    mapMode = mode;
+    document.getElementById("modePlan").classList.toggle("active", mode === "plan");
+    document.getElementById("modeStreet").classList.toggle("active", mode === "street");
+    document.getElementById("sitePlan").classList.toggle("hidden", mode !== "plan");
+    document.getElementById("streetMap").classList.toggle("hidden", mode !== "street");
+    cancelMapAction();
+    if (mode === "street") {
+        if (!navigator.onLine) {
+            streetMapOffline();
+            return;
+        }
+        initStreetMap();
+        setTimeout(() => leafletMap && leafletMap.invalidateSize(), 50);
+        renderStreetMap(true);
+        tilesLoaded = 0;
+        tileErrors = 0;
+        setTimeout(() => {
+            if (mapMode === "street" && tilesLoaded === 0) streetMapOffline();
+        }, 6000);
+    } else {
+        renderSitePlan();
+    }
+    logAudit("MAP_MODE", mode === "plan" ? "site plan" : "street map");
+}
+
+function streetMapOffline() {
+    showToast("Offline - using site plan");
+    setMapMode("plan");
+    setMapHint("Offline - using site plan (street map tiles need internet)");
+}
+
+function renderMap() {
+    const select = document.getElementById("mapCameraSelect");
+    const current = select.value;
+    select.innerHTML = cameras.map(c => `<option value="${c.id}">${escapeHTML(c.code)} ${escapeHTML(c.name)}</option>`).join("");
+    if (cameras.some(c => c.id === current)) select.value = current;
+    if (mapMode === "plan") renderSitePlan();
+    else renderStreetMap();
+    renderLinksList();
+}
+
+function renderLinksList() {
+    const list = document.getElementById("linksList");
+    const name = id => cameras.find(c => c.id === id)?.code || id;
+    list.innerHTML = links.map(l => `
+        <span class="link-chip">${escapeHTML(name(l.a))} &harr; ${escapeHTML(name(l.b))} &middot; ${l.seconds}s walk
+            <button data-link="${escapeHTML(l.id)}" title="Remove link">&times;</button></span>`).join("");
+    list.querySelectorAll("button").forEach(button => button.addEventListener("click", async () => {
+        try {
+            await api(`/links/${encodeURIComponent(button.dataset.link)}`, { method: "DELETE" });
+            loadLinks();
+        } catch (error) {
+            showToast(error.message);
+        }
+    }));
+}
+
+async function loadLinks() {
+    try {
+        links = await api("/links");
+        renderMap();
+    } catch {}
+}
+
+// ----- placing + linking -----
+function cancelMapAction() {
+    mapAction = null;
+    document.getElementById("sitePlan").classList.remove("placing");
+    document.getElementById("streetMap").classList.remove("placing");
+    setMapHint("");
+}
+
+function startPlacing() {
+    const camId = document.getElementById("mapCameraSelect").value;
+    const cam = cameras.find(c => c.id === camId);
+    if (!cam) {
+        showToast("Add a camera first");
+        return;
+    }
+    mapAction = { kind: "place", camId };
+    document.getElementById(mapMode === "plan" ? "sitePlan" : "streetMap").classList.add("placing");
+    setMapHint(mapMode === "plan"
+        ? `Click where ${cam.code} ${cam.name} is on the plan (Esc cancels)`
+        : `Click where ${cam.code} ${cam.name} is on the map, or set lat/lng with the tile's pin (Esc cancels)`);
+}
+
+async function placeCameraAt(location) {
+    const camId = mapAction.camId;
+    const cam = cameras.find(c => c.id === camId);
+    if (mapMode === "plan") {
+        mapAction = { kind: "place-heading", camId, x: location.x, y: location.y };
+        setMapHint(`Now click the direction ${cam.code} is looking at`);
+        await patchLocation(camId, { x: location.x, y: location.y });
+        return;
+    }
+    cancelMapAction();
+    await patchLocation(camId, location);
+    showToast(`${cam.code} placed`);
+}
+
+async function patchLocation(camId, location) {
+    try {
+        await api(`/cameras/${camId}`, { method: "PATCH", body: JSON.stringify({ location }) });
+        await loadCameras();
+    } catch (error) {
+        showToast(`Could not place camera: ${error.message}`);
+    }
+}
+
+function startLinking() {
+    if (cameras.length < 2) {
+        showToast("Link needs two cameras");
+        return;
+    }
+    mapAction = { kind: "link", first: null };
+    setMapHint("LINK: click the first camera on the map (Esc cancels)");
+}
+
+async function linkClick(camId) {
+    if (!mapAction.first) {
+        mapAction.first = camId;
+        setMapHint(`LINK: now click the camera people walk to from ${cameras.find(c => c.id === camId)?.code}`);
+        return;
+    }
+    const a = mapAction.first, b = camId;
+    cancelMapAction();
+    if (a === b) {
+        showToast("Pick two different cameras");
+        return;
+    }
+    const codeA = cameras.find(c => c.id === a)?.code, codeB = cameras.find(c => c.id === b)?.code;
+    const seconds = Number(prompt(`Normal walking time between ${codeA} and ${codeB} (seconds)`, "20"));
+    if (!seconds || seconds <= 0) return;
+    try {
+        await api("/links", { method: "POST", body: JSON.stringify({ a, b, seconds }) });
+        showToast(`Linked ${codeA} and ${codeB}: ${seconds}s`);
+        loadLinks();
+    } catch (error) {
+        showToast(error.message);
+    }
+}
+
+document.getElementById("sitePlanSvg").addEventListener("click", event => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+    if (!mapAction) {
+        document.getElementById("planPopup").classList.add("hidden");
+        planPopupCamId = null;
+        return;
+    }
+    if (mapAction.kind === "place") {
+        placeCameraAt({ x: +x.toFixed(4), y: +y.toFixed(4) });
+    } else if (mapAction.kind === "place-heading") {
+        const heading = Math.round(Math.atan2((y - mapAction.y) * PLAN_H, (x - mapAction.x) * PLAN_W) * 180 / Math.PI);
+        const camId = mapAction.camId;
+        cancelMapAction();
+        patchLocation(camId, { heading });
+        showToast("Camera placed");
+    }
+});
+
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && mapAction) cancelMapAction();
+});
+
+document.getElementById("modePlan").addEventListener("click", () => setMapMode("plan"));
+document.getElementById("modeStreet").addEventListener("click", () => setMapMode("street"));
+document.getElementById("placeCameraBtn").addEventListener("click", startPlacing);
+document.getElementById("linkCamerasBtn").addEventListener("click", startLinking);
+document.getElementById("uploadPlanBtn").addEventListener("click", () => document.getElementById("planFile").click());
+document.getElementById("planFile").addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+        const response = await fetch(`${API}/siteplan`, { method: "POST", body: form });
+        if (!response.ok) throw new Error((await response.json()).detail || "Upload failed");
+        loadSitePlanImage();
+        showToast("Site plan uploaded");
+    } catch (error) {
+        showToast(error.message);
+    }
+    event.target.value = "";
+});
+
+function loadSitePlanImage() {
+    const img = document.getElementById("sitePlanImg");
+    img.onload = () => {
+        hasUploadedPlan = true;
+        img.classList.remove("hidden");
+        renderSitePlan();
+    };
+    img.onerror = () => {
+        hasUploadedPlan = false;
+        img.classList.add("hidden");
+        renderSitePlan();
+    };
+    img.src = `${API}/siteplan?t=${Date.now()}`;
+}
+
+// A new alert flies the map to its camera and pulses the marker.
+function mapFlyToCamera(camId) {
+    const cam = cameras.find(c => c.id === camId);
+    if (!cam || Date.now() - lastMapFly < 3000) return;
+    lastMapFly = Date.now();
+    if (mapMode === "street" && leafletMap && cam.location?.lat != null) {
+        leafletMap.flyTo([cam.location.lat, cam.location.lng], Math.max(leafletMap.getZoom(), 17));
+        const dot = leafletMarkers.get(camId)?.getElement()?.querySelector(".street-dot");
+        if (dot) {
+            dot.classList.remove("flash");
+            void dot.offsetWidth;
+            dot.classList.add("flash");
+        }
+    } else {
+        const marker = document.querySelector(`.plan-marker[data-cam="${camId}"]`);
+        if (marker) {
+            marker.classList.add("flash");
+            setTimeout(() => marker.classList.remove("flash"), 3000);
+        }
+    }
+}
+
+// Standalone SVG of the site plan (markers, links, route) for the incident report.
+async function mapSnapshotSVG() {
+    renderSitePlan();
+    const svg = document.getElementById("sitePlanSvg").cloneNode(true);
+    svg.setAttribute("width", "1000");
+    svg.setAttribute("height", "625");
+    let background = `<rect width="1000" height="625" fill="#111A19"/>`;
+    if (hasUploadedPlan) {
+        try {
+            const blob = await (await fetch(`${API}/siteplan`)).blob();
+            const dataUrl = await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+            background += `<image href="${dataUrl}" x="0" y="0" width="1000" height="625" preserveAspectRatio="none" opacity=".85"/>`;
+        } catch {}
+    }
+    const style = `<style>text{font-family:monospace}.plan-marker text{font-size:18px;font-weight:700;fill:#f2ecdd;paint-order:stroke;stroke:#111a19;stroke-width:4px}.link-label{font-size:16px;font-weight:700;fill:#F8D794;paint-order:stroke;stroke:#111a19;stroke-width:4px}</style>`;
+    svg.innerHTML = style + background + svg.innerHTML;
+    return svg.outerHTML;
+}
 
 
 /* =========================================
@@ -4178,33 +4799,59 @@ document
 
 /* =========================================
    INCIDENT REPORT
+   Printable HTML: alerts with locations and
+   Navigate links, cameras, a site-plan snapshot
+   and the analyst's notes.
 ========================================= */
 
 document
     .getElementById("generateReport")
-    .addEventListener("click", () => {
+    .addEventListener("click", async () => {
 
         const id = document.getElementById("incidentId").value.trim() || "VIGIL-INCIDENT";
         const notes = document.getElementById("incidentNotes").value;
+        const snapshot = await mapSnapshotSVG();
+        const generated = new Date();
 
-        const report = {
-            incident_id: id,
-            generated_at: new Date().toISOString(),
-            source: currentSource,
-            active_alerts: alerts.map(a => ({
-                ...a,
-                time: formatAlertTime(a),
-                evidence_url: a.has_evidence ? `${location.origin}${API}/alerts/${a.id}/evidence` : null
-            })),
-            simulated_alerts: simulatedAlerts,
-            zones,
-            notes
-        };
+        const alertRows = alerts.map(a => {
+            const loc = alertLocation(a);
+            const nav = navigateUrl(loc);
+            return `<tr><td>${escapeHTML(formatAlertTime(a))}</td><td>${escapeHTML(a.band)}</td>
+                <td>${escapeHTML(ruleLabel(a.rule))}</td><td>${escapeHTML(a.message)}</td>
+                <td>${escapeHTML(loc.label || "")}${nav ? ` <a href="${nav}">Navigate</a>` : ""}</td>
+                <td>${a.acknowledged ? "yes" : ""}</td>
+                <td>${a.has_evidence ? `<a href="${location.origin}${API}/alerts/${a.id}/evidence">image</a>` : ""}</td></tr>`;
+        }).join("");
+        const cameraRows = cameras.map(c => {
+            const nav = navigateUrl(c.location);
+            return `<tr><td>${escapeHTML(c.code)}</td><td>${escapeHTML(c.name)}</td><td>${escapeHTML(c.location?.label || "")}</td>
+                <td>${c.location?.lat ?? ""}${c.location?.lat != null ? ", " + c.location.lng : ""}${nav ? ` <a href="${nav}">Navigate</a>` : ""}</td>
+                <td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.source_label)}</td></tr>`;
+        }).join("");
 
-        downloadJSON(report, `${id}-report.json`);
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHTML(id)} incident report</title>
+<style>body{font-family:Arial,sans-serif;margin:32px;color:#1d2725}h1{margin:0}table{border-collapse:collapse;width:100%;margin:10px 0 24px;font-size:12px}
+th,td{border:1px solid #ccd;padding:6px;text-align:left;vertical-align:top}th{background:#eef1ee}.meta{color:#667}svg{width:100%;height:auto;border:1px solid #ccd}pre{white-space:pre-wrap}</style>
+</head><body>
+<h1>VIGIL incident report: ${escapeHTML(id)}</h1>
+<p class="meta">Generated ${escapeHTML(generated.toLocaleString())} by the operator dashboard.</p>
+<h2>Site map</h2>${snapshot}
+<h2>Alerts (${alerts.length})</h2><table><tr><th>Time</th><th>Severity</th><th>Type</th><th>Description</th><th>Location</th><th>Ack</th><th>Evidence</th></tr>${alertRows}</table>
+${simulatedAlerts.length ? `<p class="meta">${simulatedAlerts.length} simulated drill alert(s) excluded.</p>` : ""}
+<h2>Cameras</h2><table><tr><th>Camera</th><th>Name</th><th>Location</th><th>Lat, Lng</th><th>Status</th><th>Source</th></tr>${cameraRows}</table>
+<h2>Analyst notes</h2><pre>${escapeHTML(notes || "-")}</pre>
+</body></html>`;
+
+        const blob = new Blob([html], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${id}-report.html`;
+        link.click();
+        URL.revokeObjectURL(url);
 
         showToast("Incident report downloaded");
-        logAudit("REPORT_GENERATED", `Incident ${id} report generated`);
+        logAudit("REPORT_GENERATED", `Incident ${id} report generated (${alerts.length} alerts, ${cameras.length} cameras)`);
 
     });
 
@@ -4240,7 +4887,10 @@ async function initialize() {
 
     logAudit("DASHBOARD_OPENED", navigator.userAgent.split(") ")[0] + ")");
 
+    loadSitePlanImage();
+
     await Promise.all([
+        loadLinks(),
         loadCameras(),
         loadStatus(),
         loadAlerts(),
@@ -4268,6 +4918,8 @@ setInterval(() => {
     loadAudit();
     verifyAudit();
 }, 3000);
+
+setInterval(loadLinks, 5000);
 
 // Zones can change from another dashboard or the API; don't clobber a
 // polygon the operator is in the middle of drawing.
