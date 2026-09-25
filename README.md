@@ -223,13 +223,17 @@ Measured on real footage, not acted demos: `tools/eval_behaviour.py`
 replays 56 clips (~35 min: CAVIAR, UMN, UR Fall, plus our own clips; manifest
 `tools/behaviour_benchmark.json`) through the live detector + tracker + pose
 + rules on a simulated clock. Datasets go in `../behaviour_datasets/`.
+The UMN videos are demo recordings of UMN's own detector (event banners and
+red trajectory lines drawn in); `tools/clean_overlays.py` removes them and the
+benchmark uses the clean copies - on the raw videos the overlays alone
+triggered alerts.
 
 | Alert | How it decides | Measured | Band |
 |---|---|---|---|
 | Possible fight | **learned**: CLIP embeddings of 2+ people in close contact, 2 s windows, logistic regression trained on the Surveillance Camera Fight Dataset (300 real CCTV clips) + 242 hard-negative windows of normal crowds (`tools/train_fight_classifier.py`); 2 windows in a row >= 0.6 | cross-validated on unseen source videos: AUC 0.86; held-out normal CCTV peaks at 0.31 (0 alerts); fires on the armed-robbery struggle in `cctv_knife.mp4` | HIGH |
 | Person down | horizontal body for 3 s where someone stood upright within 10 s (survives the track breaking mid-fall); people from conf 0.2 for this rule only | UR Fall side view 10/15 falls, 0/10 daily-activity clips | HIGH |
-| Possible panic | 3+ runners from one point, **or** a crowd of 5+ collapsing to half within 4 s while motion doubles | UMN: 8 alerts in its 11 scatter scenes, none elsewhere | HIGH |
-| Object thrown | a tracked bottle / phone / bag (or unknown blob) leaving a fast hand | UMN thrown-object clip: fires | MEDIUM, HIGH toward a person / restricted zone |
+| Possible panic | 3+ runners from one point, **or** a crowd of 5+ collapsing to half within 4 s while motion doubles or someone runs; cuts / source changes reset it | clean UMN: 9-10 of its 11 scatter scenes per run, 8 of them in all 8 replays at 6-12 fps; 1 false alert (thrown-object video) | HIGH |
+| Object thrown | a tracked bottle / phone / bag leaving a fast hand | **OFF by default.** Clean UMN: 0/17 real throws (objects are a few blurry pixels in wide CCTV); a motion-blob variant was noisy or blind (`FLY_ENABLED`). Only worth trying on close cameras | MEDIUM, HIGH toward a person / restricted zone |
 | Hands raised | both wrists above the nose for 2 s | no public CCTV set; 1 false alert in the UMN crowd | HIGH, CRITICAL with a recent weapon |
 
 31 of 32 normal clips raise nothing (the exception is a shop clerk dropping
