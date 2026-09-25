@@ -31,7 +31,11 @@ from backend import config
 from backend.analytics.weapon_filter import WeaponTemporalFilter
 
 
-def run_footage(model, video_path, conf, window, min_hits, label):
+def run_footage(model, video_path, conf, window, min_hits, label, imgsz=640):
+    """Returns (frames, duration_s, sustained_events, frames_with_hit).
+
+    Only config.WEAPON_THREAT_CLASSES count, same as the live app -- the
+    model's confusor classes (smartphone, wallet, ...) are not alerts."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise SystemExit(f"Could not open video: {video_path}")
@@ -39,6 +43,7 @@ def run_footage(model, video_path, conf, window, min_hits, label):
     wf = WeaponTemporalFilter(window=window, min_hits=min_hits)
     last_fired: dict = {}  # class -> last-alerted timestamp, mirrors AlertManager's cooldown
     raw_hits = 0
+    frames_with_hit = 0
     sustained_events = []  # confirmed AND past cooldown -- an actual dashboard alert
     frame_i = 0
     while True:
@@ -47,13 +52,16 @@ def run_footage(model, video_path, conf, window, min_hits, label):
             break
         frame_i += 1
         timestamp = frame_i / fps if fps else float(frame_i)
-        results = model.predict(frame, conf=conf, verbose=False)
+        results = model.predict(frame, conf=conf, imgsz=imgsz, verbose=False)
         boxes = results[0].boxes
         classes_this_frame = set()
         if boxes is not None and len(boxes) > 0:
-            raw_hits += len(boxes)
             for b in boxes:
-                classes_this_frame.add(model.names[int(b.cls[0])])
+                cls = model.names[int(b.cls[0])]
+                if cls in config.WEAPON_THREAT_CLASSES:
+                    raw_hits += 1
+                    classes_this_frame.add(cls)
+        frames_with_hit += bool(classes_this_frame)
         for cls in wf.update(classes_this_frame):
             prev = last_fired.get(cls)
             if prev is not None and (timestamp - prev) < config.ALERT_COOLDOWN_SECONDS:
@@ -72,7 +80,7 @@ def run_footage(model, video_path, conf, window, min_hits, label):
         print(f"  frame {f}: {cls}")
     if len(sustained_events) > 20:
         print(f"  ... and {len(sustained_events) - 20} more")
-    return frame_i, duration_s, sustained_events
+    return frame_i, duration_s, sustained_events, frames_with_hit
 
 
 def main():
@@ -90,7 +98,7 @@ def main():
     model = YOLO(args.weights)
     print(f"Model classes: {model.names}")
 
-    _, duration_s, sustained = run_footage(
+    _, duration_s, sustained, _ = run_footage(
         model, args.footage, args.conf, args.window, args.min_hits,
         "WEAPON-FREE FOOTAGE (false-positive check)",
     )
@@ -109,7 +117,7 @@ def main():
     print("=" * 72)
 
     if args.positive_footage:
-        _, _, pos_sustained = run_footage(
+        _, _, pos_sustained, _ = run_footage(
             model, args.positive_footage, args.conf, args.window, args.min_hits,
             "FOOTAGE WITH THE WEAPON (recall check)",
         )

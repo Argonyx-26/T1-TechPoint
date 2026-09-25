@@ -36,7 +36,15 @@ def main():
         help="Parallel dataloader worker processes. Lower this (e.g. 2) if training "
         "crashes with a system-RAM 'Insufficient memory' error rather than a CUDA error.",
     )
+    parser.add_argument(
+        "--lr0", type=float, default=None,
+        help="Initial learning rate. Only honored with an explicit --optimizer: "
+        "ultralytics' optimizer=auto ignores lr0 and picks its own (SGD 0.01 on big datasets).",
+    )
+    parser.add_argument("--optimizer", default="auto", help="auto, SGD, AdamW, ... (set explicitly for --lr0 to take effect)")
     args = parser.parse_args()
+    if args.lr0 is not None and args.optimizer == "auto":
+        raise SystemExit("--lr0 is ignored by optimizer=auto; pass --optimizer SGD (or AdamW) too")
 
     if not Path(args.data).exists():
         raise SystemExit(f"Dataset config not found: {args.data}")
@@ -54,7 +62,10 @@ def main():
     from ultralytics import YOLO
 
     model = YOLO(args.model)
+    extra = {"lr0": args.lr0} if args.lr0 is not None else {}
     results = model.train(
+        optimizer=args.optimizer,
+        **extra,
         data=args.data,
         epochs=args.epochs,
         imgsz=args.imgsz,
