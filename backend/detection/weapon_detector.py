@@ -22,6 +22,13 @@ class WeaponDetection:
     bbox: Tuple[float, float, float, float]
 
 
+def is_implausibly_large(bbox, frame_area: float) -> bool:
+    """True for a weapon box covering more than WEAPON_MAX_BOX_FRACTION of the
+    frame -- the model reacting to the whole scene, not an object in it."""
+    x1, y1, x2, y2 = bbox
+    return frame_area > 0 and (x2 - x1) * (y2 - y1) / frame_area > config.WEAPON_MAX_BOX_FRACTION
+
+
 class WeaponDetector:
     def __init__(self, model_path=None, device: str = None, conf_threshold: float = None):
         self.model_path = model_path or config.WEAPON_MODEL_PATH
@@ -74,6 +81,7 @@ class WeaponDetector:
             return detections
 
         names = result.names
+        frame_area = float(frame.shape[0] * frame.shape[1])
         for i in range(len(boxes)):
             cls_idx = int(boxes.cls[i].item())
             cls_name = names.get(cls_idx, str(cls_idx))
@@ -81,6 +89,8 @@ class WeaponDetector:
                 continue  # a confusor class (smartphone/wallet/banknote/card), not a threat
             conf = float(boxes.conf[i].item())
             x1, y1, x2, y2 = [float(v) for v in boxes.xyxy[i].tolist()]
+            if is_implausibly_large((x1, y1, x2, y2), frame_area):
+                continue
             detections.append(
                 WeaponDetection(
                     cls_name=cls_name,

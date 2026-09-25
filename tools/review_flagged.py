@@ -10,7 +10,8 @@ flagged. Keys:
          them. On weapon frames you then press 1 = pistol, 2 = knife.
          Then press a to accept.
     x  = clear all boxes (e.g. COCO called a pen a phone on a background
-         frame -> x, then a to accept it as background)
+         frame, or no weapon is actually visible -> x, then a to accept it
+         as background)
     q  = quit     (progress is saved after every key)
 
 A phone/weapon frame with NO box can't be accepted -- that would teach the
@@ -30,6 +31,18 @@ import cv2
 from label_capture import SOHAS_NAMES, yolo_line
 
 COLORS = {"pistol": (0, 0, 255), "knife": (0, 0, 255), "smartphone": (0, 200, 0)}
+
+
+MIN_DISPLAY_WIDTH = 960  # low-res CCTV frames are enlarged so small weapons can be boxed
+
+
+def display_scale(frame):
+    return max(1.0, MIN_DISPLAY_WIDTH / frame.shape[1])
+
+
+def enlarge(frame):
+    s = display_scale(frame)
+    return cv2.resize(frame, None, fx=s, fy=s, interpolation=cv2.INTER_CUBIC) if s > 1 else frame
 
 
 def draw(frame, label_lines, header_lines):
@@ -52,9 +65,12 @@ def draw(frame, label_lines, header_lines):
 
 def draw_box(window, frame, tag):
     """Let the reviewer drag a box; returns a YOLO line or None if cancelled."""
-    x, y, bw, bh = cv2.selectROI(window, frame, showCrosshair=False)
+    big = enlarge(frame)
+    x, y, bw, bh = cv2.selectROI(window, big, showCrosshair=False)
     if bw == 0 or bh == 0:
         return None
+    s = display_scale(frame)
+    x, y, bw, bh = x / s, y / s, bw / s, bh / s
     if tag == "weapon":
         cls_name = None
         while cls_name is None:
@@ -92,14 +108,16 @@ def main():
         drawn = False
 
         while True:
-            can_accept = bool(lines) or m["tag"] == "other"
-            box_note = f"{len(lines)} box(es)" if lines else ("NO BOX -> accept = background" if can_accept else "NO BOX -> draw (b), d or s")
+            # A phone/weapon frame can only become background after an explicit
+            # x (clear) -- never by accepting a frame whose box simply went missing.
+            can_accept = bool(lines) or m["tag"] == "other" or drawn
+            box_note = f"{len(lines)} box(es)" if lines else ("NO BOX -> accept = background" if can_accept else "NO BOX -> draw (b), x+a if nothing there, d or s")
             header = [
                 f"[{i + 1}/{len(queue)}] {name}  tag={m['tag']}  {box_note}",
                 "boxes edited by you" if drawn else m["reason"],
                 "a=accept  b=draw box" + ("  (then 1=pistol 2=knife)" if m["tag"] == "weapon" else "") + "  x=clear  d=delete  s=skip  q=quit",
             ]
-            cv2.imshow(window, draw(frame.copy(), lines, header))
+            cv2.imshow(window, draw(enlarge(frame), lines, header))
             key = cv2.waitKey(0) & 0xFF
             if key == ord("b"):
                 line = draw_box(window, frame, m["tag"])

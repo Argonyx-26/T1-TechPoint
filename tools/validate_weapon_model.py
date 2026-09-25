@@ -29,13 +29,15 @@ import cv2
 
 from backend import config
 from backend.analytics.weapon_filter import WeaponTemporalFilter
+from backend.detection.weapon_detector import is_implausibly_large
 
 
 def run_footage(model, video_path, conf, window, min_hits, label, imgsz=640):
     """Returns (frames, duration_s, sustained_events, frames_with_hit).
 
     Only config.WEAPON_THREAT_CLASSES count, same as the live app -- the
-    model's confusor classes (smartphone, wallet, ...) are not alerts."""
+    model's confusor classes (smartphone, wallet, ...) are not alerts --
+    and whole-scene boxes are dropped (WEAPON_MAX_BOX_FRACTION)."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise SystemExit(f"Could not open video: {video_path}")
@@ -55,10 +57,11 @@ def run_footage(model, video_path, conf, window, min_hits, label, imgsz=640):
         results = model.predict(frame, conf=conf, imgsz=imgsz, verbose=False)
         boxes = results[0].boxes
         classes_this_frame = set()
+        frame_area = float(frame.shape[0] * frame.shape[1])
         if boxes is not None and len(boxes) > 0:
             for b in boxes:
                 cls = model.names[int(b.cls[0])]
-                if cls in config.WEAPON_THREAT_CLASSES:
+                if cls in config.WEAPON_THREAT_CLASSES and not is_implausibly_large(b.xyxy[0].tolist(), frame_area):
                     raw_hits += 1
                     classes_this_frame.add(cls)
         frames_with_hit += bool(classes_this_frame)

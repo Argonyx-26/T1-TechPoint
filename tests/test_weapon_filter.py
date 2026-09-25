@@ -44,3 +44,12 @@ def test_different_classes_tracked_independently():
 def test_invalid_min_hits_raises():
     with pytest.raises(ValueError):
         WeaponTemporalFilter(window=4, min_hits=5)
+
+
+def test_giant_weapon_boxes_are_dropped():
+    from backend.detection.weapon_detector import is_implausibly_large
+
+    frame_area = 640 * 480
+    assert is_implausibly_large((0, 0, 600, 450), frame_area)       # ~88% of the frame
+    assert not is_implausibly_large((100, 100, 200, 160), frame_area)  # a hand-held pistol
+    assert not is_implausibly_large((0, 0, 300, 150), frame_area)   # ~15%, still plausible close-up

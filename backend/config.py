@@ -28,6 +28,10 @@ WEAPON_MIN_CONF = 0.25       # floor for what the model reports at all (feeds di
 WEAPON_ALERT_MIN_CONF = 0.45   # stricter bar that actually raises a CRITICAL alert
 WEAPON_ALERT_MIN_CONF = 0.55   # raised from 0.45 -- fewer false CRITICALs, requires a clearer hold
 WEAPON_THREAT_CLASSES = {"pistol", "knife"}
+# A real weapon never fills most of a CCTV frame; boxes larger than this
+# fraction of the frame are the model latching onto the whole scene (e.g. a
+# phone-filmed monitor) and are dropped before display/alerting.
+WEAPON_MAX_BOX_FRACTION = 0.30
 
 def _resolve_device() -> str:
     """`ARGONYX_DEVICE` always wins; otherwise auto-pick a CUDA GPU if torch

@@ -14,6 +14,8 @@ Labeling policy, per frame tag from the session's .json sidecar:
   weapon -> the weapon model's pistol/knife boxes at conf >= --weapon-conf.
             Otherwise FLAGGED, with its lower-confidence pistol/knife
             candidates attached.
+  skip   -> frame not extracted at all (e.g. the part of a clip where a
+            weapon may be present but unlabeled).
 
 Output layout (ultralytics finds labels by swapping images/ -> labels/):
     <out-root>/<session>/images/<session>_<frame>.jpg
@@ -153,6 +155,8 @@ def main():
         if frame_i % args.frame_stride:
             continue
         tag = tag_for_frame(segments, frame_i)
+        if tag == "skip":
+            continue
         if tag == "phone":
             lines, cands = phone_boxes(coco, frame, args.phone_conf)
             status, reason = ("auto", "") if lines else ("flagged", "phone frame: COCO found no confident cell phone")
