@@ -1,8 +1,8 @@
 """Per-frame loop on a background thread.
 
-Current stages: read frame -> general detection + tracking -> weapon detection ->
-temporal filter -> draw overlays -> JPEG encode.
-Still to add: rule evaluation, alert ingestion.
+Stages: read frame -> general detection + tracking -> rule evaluation ->
+weapon detection -> temporal filter -> draw overlays -> JPEG encode -> alert ingestion
+(the annotated JPEG is kept as the alert's evidence).
 """
 import threading
 import time
@@ -11,15 +11,20 @@ import cv2
 import numpy as np
 
 from backend import config
+from backend.alerts.manager import AlertManager
 from backend.detection.weapon_detector import WeaponDetector
+from backend.rules import RulesEngine, Thresholds
 from backend.tracking import GeneralDetector, TrackManager
 from backend.video_source import VideoSource
 from backend.weapon_filter import WeaponFilter
+from backend.zones import ZoneStore
 
 PERSON_COLOR = (0, 200, 0)
 OBJECT_COLOR = (200, 160, 0)
 WEAPON_RAW_COLOR = (0, 140, 255)
 CRITICAL_COLOR = (0, 0, 220)
+RESTRICTED_ZONE_COLOR = (0, 0, 255)
+ZONE_COLOR = (0, 191, 255)  # amber
 
 
 class Pipeline:
@@ -34,7 +39,13 @@ class Pipeline:
         self.source: VideoSource | None = None
         self.started_at = time.time()
 
+        self.alerts = AlertManager()
+        self.zones = ZoneStore()
+        self.thresholds = Thresholds()
+        self.rules = RulesEngine(self.thresholds)
+
         self._lock = threading.Lock()
+        self._control = threading.Lock()  # serializes start/stop from API threads
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
@@ -56,22 +67,28 @@ class Pipeline:
         self.detector.reset()
         self.tracks.reset()
         self.weapon_filter.reset()
+        self.rules.reset()
         self.weapon_dets = []
         self.confirmed_weapons = set()
         self.frame_index = 0
 
-    def start(self, kind: str, value) -> None:
-        self.stop()
-        src = VideoSource(kind, value)
-        src.open()  # raise here so the API can report a bad source
-        self.reset_state()
-        self.source = src
-        self.last_error = None
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="pipeline", daemon=True)
-        self._thread.start()
+    def start(self, kind: str, value, label: str | None = None) -> None:
+        with self._control:
+            self._stop_locked()
+            src = VideoSource(kind, value, label)
+            src.open()  # raise here so the API can report a bad source
+            self.reset_state()
+            self.source = src
+            self.last_error = None
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._run, name="pipeline", daemon=True)
+            self._thread.start()
 
     def stop(self) -> None:
+        with self._control:
+            self._stop_locked()
+
+    def _stop_locked(self) -> None:
         if self._thread is not None:
             self._stop.set()
             self._thread.join(timeout=5)
@@ -86,6 +103,19 @@ class Pipeline:
     @property
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    def status(self) -> dict:
+        running = self.running
+        src = self.source
+        return {
+            "running": running,
+            "source": src.label if (running and src) else None,
+            "object_count": len(self.active_tracks) if running else 0,
+            "fps": round(self.fps, 1) if running else 0.0,
+            "latency_ms": round(self.latency_ms, 1) if running else 0.0,
+            "device": config.DEVICE,
+            "alert_count": self.alerts.count(),
+        }
 
     # ---- frame loop ------------------------------------------------------
 
@@ -120,6 +150,9 @@ class Pipeline:
             detections = []
         active = self.tracks.update(detections)
         self.active_tracks = active
+        h, w = frame.shape[:2]
+        zones = self.zones.all()
+        events = self.rules.evaluate(active, zones, (w, h))
 
         # Between inference frames the last raw boxes and confirmed state carry over
         if self.weapons.available and self.frame_index % config.WEAPON_EVERY_N_FRAMES == 0:
@@ -131,9 +164,32 @@ class Pipeline:
             self.confirmed_weapons = set(self.weapon_filter.update(self.weapon_dets))
         self.frame_index += 1
 
+        self._draw_zones(frame, zones)
         self._draw(frame, active)
         self._draw_weapons(frame, self.weapon_dets, self.confirmed_weapons)
-        return self._encode(frame)
+        jpeg = self._encode(frame)
+
+        # Weapon alerts come only from the confirmed state; the manager's cooldown
+        # (per weapon class) stops a held weapon from re-firing every frame
+        for name in sorted(self.confirmed_weapons):
+            self.alerts.raise_alert("weapon", f"{name.capitalize()} detected in view "
+                                    f"(confirmed in {config.WEAPON_MIN_HITS} of the last "
+                                    f"{config.WEAPON_WINDOW} frames)", key=name, evidence=jpeg)
+        for e in events:
+            self.alerts.raise_alert(e.rule, e.description, zone=e.zone, track_id=e.track_id,
+                                    key=e.key, evidence=jpeg)
+        return jpeg
+
+    def _draw_zones(self, frame, zones) -> None:
+        h, w = frame.shape[:2]
+        for z in zones:
+            pts = np.array(z.pixel_polygon(w, h), dtype=np.int32)
+            color = RESTRICTED_ZONE_COLOR if z.restricted else ZONE_COLOR
+            cv2.polylines(frame, [pts], True, color, 2, cv2.LINE_AA)
+            x, y = pts[0]
+            label = f"{z.name} (RESTRICTED)" if z.restricted else z.name
+            cv2.putText(frame, label, (int(x) + 6, max(int(y) - 8, 14)), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55, color, 2, cv2.LINE_AA)
 
     def _draw_weapons(self, frame, dets, confirmed: set) -> None:
         for d in dets:

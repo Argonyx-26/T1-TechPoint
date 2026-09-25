@@ -41,3 +41,34 @@ IDLE_FRAME_SIZE = (1280, 720)
 
 # Paths the frontend is served from (read-only, owned by the frontend teammate)
 FRONTEND_DIR = ROOT / "frontend"
+
+# Video sources
+SAMPLES_DIR = ROOT / "test_videos"
+UPLOADS_DIR = ROOT / "uploads"
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+
+# Zones persist across restarts
+DATA_DIR = ROOT / "data"
+ZONES_PATH = DATA_DIR / "zones.json"
+
+# Rule thresholds: defaults, editable live via /api/thresholds
+DEFAULT_THRESHOLDS = {
+    "loiter_seconds": 30.0,
+    "crowd_threshold": 10,
+    "unattended_seconds": 20.0,
+    "wrong_direction_angle_deg": 45.0,
+}
+
+# Alerts
+ALERT_MAX = 200
+ALERT_COOLDOWN_SECONDS = 12.0
+# rule -> (human-readable type, severity). Weapon alerts far outrank behavioural ones.
+ALERT_RULES = {
+    "weapon": ("Weapon Detected", "critical"),
+    "restricted_intrusion": ("Restricted Zone Intrusion", "high"),
+    "crowd_surge": ("Crowd Surge", "medium"),
+    "wrong_direction": ("Wrong Direction", "medium"),
+    "loitering": ("Loitering", "low"),
+}
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}

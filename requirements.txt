@@ -3,3 +3,8 @@ uvicorn[standard]
 ultralytics
 opencv-python
 numpy
+python-multipart
+
+# tests
+pytest
+httpx

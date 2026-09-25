@@ -4,29 +4,41 @@ from pathlib import Path
 
 import cv2
 
+URL_TIMEOUT_MS = 5000
+
 
 class VideoSource:
-    def __init__(self, kind: str, value):
+    def __init__(self, kind: str, value, label: str | None = None):
         self.kind = kind  # "webcam" | "file" | "url"
         self.value = value
+        self._label = label
         self.cap = None
         self._frame_interval = 0.0
         self._last_read = 0.0
 
     @property
     def label(self) -> str:
+        """Readable name for the dashboard, e.g. "Webcam 0" or "sample: vtest.avi"."""
+        if self._label:
+            return self._label
         if self.kind == "webcam":
-            return f"webcam:{self.value}"
+            return f"Webcam {self.value}"
         if self.kind == "file":
-            return f"file:{Path(self.value).name}"
-        return f"url:{self.value}"
+            return f"file: {Path(self.value).name}"
+        return f"camera: {self.value}"
 
     def open(self) -> None:
         if self.kind == "webcam":
             # CAP_DSHOW opens much faster than the default backend on Windows
             self.cap = cv2.VideoCapture(int(self.value), cv2.CAP_DSHOW)
+        elif self.kind == "url":
+            # Without timeouts an unreachable camera blocks the request for ~30s
+            self.cap = cv2.VideoCapture(str(self.value), cv2.CAP_FFMPEG, [
+                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, URL_TIMEOUT_MS,
+                cv2.CAP_PROP_READ_TIMEOUT_MSEC, URL_TIMEOUT_MS,
+            ])
         else:
-            if self.kind == "file" and not Path(self.value).is_file():
+            if not Path(self.value).is_file():
                 raise FileNotFoundError(self.value)
             self.cap = cv2.VideoCapture(str(self.value))
         if not self.cap.isOpened():

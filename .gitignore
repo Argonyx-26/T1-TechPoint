@@ -7,3 +7,7 @@ __pycache__/
 test_videos/
 evidence/
 runs/
+
+# runtime data
+uploads/
+data/
