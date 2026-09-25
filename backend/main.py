@@ -409,7 +409,7 @@ def get_thresholds():
 @app.post("/api/thresholds")
 def set_thresholds(thresholds: ThresholdsIn):
     values = thresholds.dict(exclude_none=True)
-    app_state.manager.update_thresholds(**values)
+    app_state.manager.update_thresholds(save=True, **values)
     audit("THRESHOLDS_CHANGED", ", ".join(f"{k}={v}" for k, v in values.items()), actor="operator")
     return app_state.thresholds()
 

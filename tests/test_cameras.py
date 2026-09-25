@@ -207,3 +207,12 @@ def test_alert_message_does_not_repeat_the_code(manager):
     named = manager.add("Main Gate", "vtest.avi", start=False)
     assert AlertManager._placed("Weapon detected - knife 72%", plain) == "CAM-01: Weapon detected - knife 72%"
     assert AlertManager._placed("x", named) == "Main Gate (CAM-02): x"
+
+
+def test_thresholds_persist_across_restart(tmp_path, manager):
+    manager.add("Gate", "vtest.avi", start=False)
+    manager.update_thresholds(save=True, surge_min_increase=2, surge_window_s=5.0)
+    again = CameraManager(shared=FakeShared(), store_path=tmp_path / "cameras.json",
+                          zones_dir=tmp_path, primary_zone_file=tmp_path / "zones.json")
+    engine = again.get("cam-1").pipeline.rule_engine
+    assert (engine.surge_min_increase, engine.surge_window_s) == (2, 5.0)

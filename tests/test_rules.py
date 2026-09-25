@@ -258,3 +258,12 @@ def test_zone_live_count_is_recorded():
     engine = RuleEngine()
     engine.evaluate(people(4), [GATE], timestamp=0.0)
     assert engine.zone_counts == {"g": 4}
+
+
+def test_small_team_demo_surge_plus_two_in_five_seconds():
+    # the dashboard's SMALL-TEAM DEMO preset: 1 person, then 2 more walk in
+    engine = RuleEngine()
+    engine.update_thresholds(surge_min_increase=2, surge_window_s=5)
+    fired = feed(engine, [1] * 50 + [3] * 25)
+    assert len(fired) == 1
+    assert fired[0][1].message.startswith("Crowd surge in 'Gate A': 1 -> 3 people in ")

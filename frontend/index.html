@@ -835,6 +835,7 @@ textarea:focus {
 .locate-url { margin: 0 22px; font-family: var(--font-mono); font-size: 10px; word-break: break-all; color: var(--khaki); }
 .locate-steps { margin: 10px 22px 16px; padding-left: 18px; font-size: 11px; color: var(--text-muted); }
 .loc-hint { margin: 0 22px 8px; font-size: 11px; color: var(--khaki); min-height: 14px; }
+.threshold-preset { grid-column: 1 / -1; font-size: 10px; padding: 7px; }
 .map-hint { margin: 0 22px 10px; min-height: 16px; font-family: var(--font-mono); font-size: 10px; color: var(--khaki); }
 .map-stage { position: relative; margin: 0 22px 14px; border-radius: var(--radius-md); overflow: hidden;
     border: 1px solid var(--border); background: var(--noir); aspect-ratio: 16 / 10; }
@@ -2146,6 +2147,11 @@ textarea:focus {
                     </label>
 
                     <span class="threshold-group-label">CROWD SURGE</span>
+
+                    <button type="button" class="secondary-btn threshold-preset" id="surgeDemoPreset"
+                        title="Surge = +2 people within 5 s; press APPLY. Surge runs in zones with a crowd threshold.">
+                        SMALL-TEAM DEMO: +2 IN 5 S
+                    </button>
 
                     <label>
                         Surge Increase
@@ -5521,6 +5527,11 @@ function fillThresholds(values) {
     if (values.crowd_threshold != null)
         document.getElementById("zoneCrowdThreshold").value = values.crowd_threshold;
 }
+
+document.getElementById("surgeDemoPreset").addEventListener("click", () => {
+    fillThresholds({ surge_min_increase: 2, surge_window_s: 5 });
+    showToast("Surge +2 people in 5 s - press APPLY THRESHOLDS");
+});
 
 async function loadThresholds() {
     try {

@@ -683,6 +683,10 @@ class CameraManager:
                 self._create(c["id"], c["name"], c["source"], Location.from_dict(c.get("location"), c["name"]))
             except Exception as exc:
                 print(f"[cameras] could not restore {c}: {exc}")
+        # Rule thresholds (e.g. a small-team crowd surge of +2 in 5 s) survive restarts.
+        saved = data.get("thresholds")
+        if isinstance(saved, dict):
+            self.update_thresholds(**{k: v for k, v in saved.items() if isinstance(v, (int, float))})
         site = data.get("site")
         if isinstance(site, dict) and site.get("lat") is not None:
             try:
@@ -697,7 +701,7 @@ class CameraManager:
     def save(self):
         with self._lock:
             data = {"cameras": [c.persist_dict() for c in self.cameras.values()], "links": self.links,
-                    "site": self.site}
+                    "site": self.site, "thresholds": self.thresholds}
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.store_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -841,10 +845,12 @@ class CameraManager:
                 return float(l["seconds"])
         return None
 
-    def update_thresholds(self, **values):
+    def update_thresholds(self, save: bool = False, **values):
         self.thresholds.update(values)
         for camera in self.cameras.values():
             camera.pipeline.rule_engine.update_thresholds(**values)
+        if save:
+            self.save()
 
     # -- analytics hooks -----------------------------------------------------------
     def _on_frame(self, camera: Camera, frame, annotated):
