@@ -1,0 +1,244 @@
+/* =========================================================
+   VIGIL THEME: Sage + Navy + White  ("vigil blue frontend")
+   Loaded after the base stylesheet in index.html; remove the
+   <link> to fall back to the original dark theme.
+
+   From the supplied design: sage canvas with a sage -> navy gradient,
+   white panels, navy primary, green secondary, Times New Roman.
+   Extended here to every component the backend added since (camera
+   wall, site / street map, Ask Vigil, movement log, modules, location
+   tools, evidence and report modals). Deliberately NOT carried over
+   from the design: backdrop-filter blur (panels are opaque, and blur
+   costs camera fps with the dashboard open).
+========================================================= */
+
+:root {
+    --navy:        #29465A;
+    --navy-deep:   #1F3A4B;
+    --navy-soft:   #E4ECF1;
+    --sage:        #B4D0BE;
+    --sage-soft:   #EAF2ED;
+    --green:       #315B48;
+    --green-soft:  #E2EEE7;
+    --amber:       #A96A24;
+    --amber-soft:  #F7EBD9;
+    --red:         #B94E3D;
+    --red-soft:    #F7E2DE;
+    --ink:         #172B26;
+    --ink-muted:   #5B6D66;
+    --line:        #CBD9D0;
+    --line-soft:   #E1E9E4;
+    --surface:     #FFFFFF;
+    --surface-alt: #F4F8F5;
+
+    /* base-stylesheet variables, remapped */
+    --noir:           var(--sage-soft);
+    --noir-raised:    var(--surface-alt);
+    --emerald:        var(--surface);
+    --emerald-soft:   var(--surface-alt);
+    --emerald-border: var(--line);
+    --wasabi:         var(--navy);
+    --wasabi-dim:     #60798A;
+    --khaki:          var(--green);
+    --khaki-dim:      #547866;
+    --earth:          var(--amber);
+    --earth-soft:     var(--amber-soft);
+    --critical:       var(--red);
+    --critical-glow:  rgba(185, 78, 61, 0.20);
+
+    --bg:             var(--sage);
+    --panel:          var(--surface);
+    --panel-header:   var(--surface);
+    --border:         var(--line);
+    --text-primary:   var(--ink);
+    --text-heading:   var(--ink);
+    --text-muted:     var(--ink-muted);
+    --accent:         var(--navy);
+    --accent-contrast:#FFFFFF;
+
+    --sev-critical:   var(--red);
+    --sev-high:       var(--amber);
+    --sev-medium:     var(--navy);
+    --sev-low:        var(--green);
+
+    --shadow-panel:   0 1px 2px rgba(23, 43, 38, .05), 0 8px 24px rgba(41, 70, 90, .08);
+    --shadow-pop:     0 24px 64px rgba(23, 43, 38, .22);
+
+    --font-ui:   "Times New Roman", Times, serif;
+    --font-mono: "Times New Roman", Times, serif;
+}
+
+/* ---------- canvas & type ---------- */
+html, body {
+    background: linear-gradient(135deg, #B4D0BE 0%, #A9C9C5 24%, #8FAFC0 52%, #668AA5 78%, #29465A 100%) fixed;
+    color: var(--ink);
+}
+body { background-image: none; }
+body, button, input, select, textarea, option, label, table, svg text {
+    font-family: "Times New Roman", Times, serif;
+}
+/* figures line up in tables / counters */
+.metric-card strong, .system-time, .alert-time, .audit-time, .cam-fps, .tl-axis, .move-id,
+.pop-meta, .modal-location, .reid-badge { font-variant-numeric: tabular-nums; }
+::selection { background: var(--navy); color: #fff; }
+::-webkit-scrollbar-thumb { background: #9FB8A8; }
+:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+
+/* ---------- top bar ---------- */
+.topbar {
+    background: rgba(255, 255, 255, .92);
+    border-bottom: 1px solid rgba(41, 70, 90, .14);
+    box-shadow: 0 2px 12px rgba(23, 43, 38, .06);
+}
+.brand h1 { color: var(--navy); letter-spacing: 4px; }
+.brand p { color: var(--ink-muted); }
+.brand-mark span { background: linear-gradient(180deg, var(--navy), var(--green)); }
+.system-state { background: var(--surface-alt); border-color: var(--line); color: var(--navy); }
+.system-time { color: var(--ink); border-left-color: var(--line); }
+.status-dot, .status-dot.green { background: var(--green); box-shadow: 0 0 0 4px rgba(49, 91, 72, .14); }
+
+/* ---------- metrics ---------- */
+.metric-card { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-panel); }
+.metric-card:hover { border-color: var(--navy); }
+.metric-icon, .metric-icon.blue, .metric-icon.purple { background: var(--navy-soft); color: var(--navy); }
+.metric-icon.green  { background: var(--green-soft); color: var(--green); }
+.metric-icon.orange { background: var(--amber-soft); color: var(--amber); }
+.metric-label { color: var(--ink-muted); }
+.metric-card strong { color: var(--navy); font-size: 20px; }
+
+/* ---------- panels ---------- */
+.panel { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-panel); }
+.panel-header { background: var(--surface); border-bottom: 1px solid var(--line-soft); }
+.section-kicker { color: var(--navy); letter-spacing: 2.4px; }
+.panel-header h2 { color: var(--ink); font-size: 18px; }
+
+/* ---------- buttons & inputs ---------- */
+.primary-btn { background: var(--navy); background-image: none; color: #fff; border-color: var(--navy); }
+.primary-btn:hover { background: var(--navy-deep); border-color: var(--navy-deep); }
+.secondary-btn { background: var(--surface); color: var(--navy); border-color: #AFC4B6; }
+.secondary-btn:hover { background: var(--navy-soft); color: var(--navy-deep); border-color: var(--navy); }
+.danger-btn { background: var(--red-soft); color: #A54032; border-color: #E5B8AF; }
+input, select, textarea, .input-unit, .map-toolbar select, .geo-search input {
+    background: var(--surface); color: var(--ink); border-color: var(--line);
+}
+input:focus, select:focus, textarea:focus { border-color: var(--navy); }
+.input-unit span { color: var(--ink-muted); border-left-color: var(--line); }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--navy); }
+
+/* ---------- video & camera wall (images stay on dark for contrast) ---------- */
+.video-container, .video-placeholder, .zone-canvas-wrapper { background: var(--navy); border-color: #AFC4B6; }
+.video-placeholder h3 { color: #fff; }
+.video-placeholder p { color: #D3E0D8; }
+.radar-ring { border-color: rgba(180, 208, 190, .42); }
+.radar-sweep { background: conic-gradient(from 0deg, rgba(180, 208, 190, .42), transparent 30%); }
+.radar-center { background: var(--sage); box-shadow: 0 0 12px 2px rgba(180, 208, 190, .45); }
+.video-overlay { background: rgba(23, 43, 38, .72); border-color: rgba(180, 208, 190, .24); color: #fff; }
+.green-text { color: var(--sage); }
+.live-indicator { background: var(--green-soft); border-color: #C2D8C9; color: var(--green); }
+.live-indicator span:first-child { background: var(--green); }
+.camera-wall { background: var(--surface-alt); }
+.camera-tile { background: var(--surface); border-color: #AFC4B6; }
+.camera-feed { background: var(--ink); }
+.camera-tile:hover { border-color: var(--navy); }
+.camera-tile.critical { border-color: var(--red); box-shadow: 0 0 0 2px rgba(185, 78, 61, .45); }
+.camera-tile-head { background: var(--surface); border-bottom-color: var(--line-soft); }
+.camera-title strong { color: var(--ink); }
+.camera-title small { color: var(--ink-muted); }
+.camera-live { color: var(--green); }
+.camera-live::before { background: var(--green); }
+.camera-live.reconnecting { color: var(--amber); }
+.camera-live.offline { color: var(--red); }
+.camera-empty { color: var(--sage); }
+.camera-stats, .camera-actions { background: var(--surface); color: var(--ink-muted); }
+
+/* ---------- sources / zones / thresholds ---------- */
+.source-btn { background: var(--surface-alt); border-color: var(--line); }
+.source-btn:hover { background: var(--surface); border-color: var(--navy); }
+.source-btn.active { background: var(--navy-soft); border-color: var(--navy); }
+.source-icon { color: var(--navy); }
+.source-btn span b { color: var(--ink); }
+.source-btn span small { color: var(--ink-muted); }
+.video-source-status { background: var(--surface-alt); border-color: var(--line-soft); color: var(--ink-muted); }
+.video-source-status strong { color: var(--navy); }
+.canvas-help { background: rgba(255, 255, 255, .92); color: var(--ink-muted); }
+.threshold-group-label { color: var(--navy); border-bottom: 1px solid var(--line-soft); }
+
+/* ---------- alerts ---------- */
+.alert-counter { background: var(--navy-soft); color: var(--navy); }
+.alert-item { background: var(--surface-alt); border-color: var(--line); }
+.alert-item.critical { border-left-color: var(--red); background: #FCF4F2; }
+.alert-item.high     { border-left-color: var(--amber); }
+.alert-item.medium   { border-left-color: var(--navy); }
+.alert-item.low      { border-left-color: var(--green); }
+.alert-type { color: var(--ink); }
+.alert-description { color: var(--ink-muted); }
+.alert-time { color: #718078; }
+.alert-severity.critical { background: var(--red-soft); color: #A54032; }
+.alert-severity.high     { background: var(--amber-soft); color: #8B5C25; }
+.alert-severity.medium   { background: var(--navy-soft); color: var(--navy); }
+.alert-severity.low      { background: var(--green-soft); color: var(--green); }
+.empty-icon { background: var(--green-soft); color: var(--green); }
+.nav-link { color: var(--navy); }
+
+/* ---------- incident / audit / lists ---------- */
+.incident-status, .audit-item, .zone-list-item, .modal-details > div {
+    background: var(--surface-alt); border-color: var(--line);
+}
+.incident-status { color: var(--ink-muted); }
+.audit-action { color: var(--navy); }
+.audit-time { color: #718078; }
+.audit-detail { color: var(--ink-muted); }
+.chain-badge.verified { color: var(--green); }
+.chain-badge.tampered { color: var(--red); }
+
+/* ---------- site plan & street map ---------- */
+.map-stage { background: var(--surface-alt); border-color: var(--line); }
+.map-mode { border-color: var(--line); }
+.map-mode button { color: var(--ink-muted); }
+.map-mode button.active { background: var(--navy-soft); color: var(--navy); }
+.map-hint { color: var(--navy); }
+.plan-marker text { fill: #fff; stroke: var(--ink); }
+.link-label { fill: var(--navy); stroke: #fff; }
+.link-chip { border-color: var(--line); color: var(--ink-muted); background: var(--surface); }
+.map-popup { background: var(--surface); border-color: var(--line); color: var(--ink); }
+.map-popup .pop-title { color: var(--navy); }
+.map-popup .pop-meta { color: var(--ink-muted); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+.leaflet-container { font-family: "Times New Roman", Times, serif; }
+.street-dot { border-color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); color: var(--ink); }
+.geo-results { background: var(--surface); border-color: var(--line); }
+.geo-results button { color: var(--ink); border-bottom-color: var(--line-soft); }
+.geo-results button:hover { background: var(--navy-soft); }
+.geo-results small { color: var(--ink-muted); }
+.cand-popup b { color: var(--navy); }
+.locate-url, .loc-hint { color: var(--navy); }
+.locate-steps { color: var(--ink-muted); }
+
+/* ---------- Ask Vigil / follow / movement log ---------- */
+.ask-chip { background: var(--navy-soft); border-color: #B9CAD6; color: var(--navy); }
+.ask-result { background: var(--surface-alt); border-color: var(--line); }
+.ask-result:hover, .move-row:hover, .move-row.selected { border-color: var(--navy); }
+.ask-result .meta b, .reid-badge, .move-id { color: var(--navy); }
+.follow-banner { background: var(--navy-soft); border-color: #B9CAD6; color: var(--navy); }
+.follow-banner .dot { background: var(--navy); }
+.move-row { background: var(--surface-alt); border-color: var(--line); }
+.tl-seg { background: var(--navy); }
+.tl-seg.open { background: linear-gradient(90deg, var(--navy), #60798A); }
+.tl-seg span { color: #fff; }
+
+/* ---------- analytics modules ---------- */
+.module-row { border-color: var(--line-soft); }
+.module-row.needs-pose { opacity: .55; }
+
+/* ---------- modals & toast ---------- */
+.modal { background: rgba(23, 43, 38, .38); }
+.modal-box { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-pop); }
+.modal-header { border-bottom-color: var(--line-soft); }
+.close-btn { color: var(--ink-muted); }
+.close-btn:hover { background: var(--navy-soft); color: var(--navy); }
+.test-result.ok { color: var(--green); }
+.test-result.bad { color: var(--red); }
+.toast { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: 0 12px 32px rgba(41, 70, 90, .16); }
+.toast-dot { background: var(--green); }
+
+* { text-shadow: none; }

@@ -1633,6 +1633,8 @@ textarea:focus {
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet"
     >
+    <!-- Sage + navy + white theme (remove this line for the original dark theme) -->
+    <link rel="stylesheet" href="/static/theme.css">
 </head>
 
 <body>
@@ -3454,8 +3456,11 @@ function pollSnapshots(img, camId, intervalMs, alive) {
     };
     img._resumePoll = () => { if (waiting) next(); };
     tileObserver?.observe(img);
-    img.onload = () => setTimeout(next, intervalMs);
-    img.onerror = () => setTimeout(next, 1000);
+    // No frame yet (camera stopped / starting): show the tile's own message,
+    // not the browser's broken-image icon.
+    img.style.visibility = "hidden";
+    img.onload = () => { img.style.visibility = "visible"; setTimeout(next, intervalMs); };
+    img.onerror = () => { img.style.visibility = "hidden"; setTimeout(next, 1000); };
     // Start on the next tick: a new tile isn't in the page until its builder returns.
     setTimeout(next, 0);
 }
@@ -3876,7 +3881,7 @@ document.getElementById("camSaveBtn").addEventListener("click", async () => {
       tiles; falls back to A when tiles can't load.
 ========================================= */
 
-const MAP_COLORS = { none: "#6fbf73", LOW: "#6fbf73", MEDIUM: "#F8D794", HIGH: "#e8913a", CRITICAL: "#ef5a3a", offline: "#6b7470" };
+const MAP_COLORS = { none: "#3E8E5E", LOW: "#3E8E5E", MEDIUM: "#C08A2E", HIGH: "#D0702A", CRITICAL: "#C0392B", offline: "#7B8784" };
 const PLAN_W = 1000, PLAN_H = 625;
 const svgNS = "http://www.w3.org/2000/svg";
 
