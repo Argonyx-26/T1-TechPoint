@@ -113,6 +113,18 @@ def get_status():
     return app_state.status()
 
 
+@app.get("/api/dashboard")
+def get_dashboard(minutes: float = 30, alerts: int = 50):
+    """Everything the dashboard polls, in one request: status, alerts,
+    cameras and movements. One round trip every 2s instead of four."""
+    return {
+        "status": app_state.status(),
+        "alerts": [a.to_dict() for a in app_state.alert_manager.ranked(alerts)],
+        "cameras": [c.to_dict() for c in app_state.manager.list()],
+        "movements": app_state.movements.log(minutes),
+    }
+
+
 # ---------- alerts ----------
 @app.get("/api/alerts")
 def get_alerts(limit: int = 50, camera_id: Optional[str] = None):

@@ -194,10 +194,30 @@ auto-plays the first one found on startup if no webcam is available.
 ## Running
 
 ```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8000`. From the dashboard you can:
+Open **`http://127.0.0.1:8000`** on the laptop, not `http://localhost:8000`:
+Windows resolves `localhost` to IPv6 `::1` first, and every request then
+pays ~0.2 s falling back to IPv4.
+
+`--host 0.0.0.0` also makes the server reachable from phones on the same
+Wi-Fi / hotspot (needed for the phone-GPS locate links, `http://<laptop LAN
+ip>:8000/locate/CAM-02`). Use `--host 127.0.0.1` to keep it laptop-only.
+Skip `--reload` for demos: it restarts the server (and every camera) on
+each file save.
+
+**Keeping the cameras fast with the dashboard open.** The browser renders on
+the same CPU the detector needs. The dashboard therefore makes one batched
+`GET /api/dashboard` call every 2 s (status, alerts, cameras, movements),
+verifies the audit chain on load and once a minute, refreshes camera tiles
+at 2 frames/s only while they are on screen (the big view streams), and
+uses no blur or looping animations. Measured with 4 cameras (webcam x2 +
+two crowd clips) on an RTX 3050: old dashboard 7.9 -> 4.0 fps when opened,
+now 7.9 -> 7.8. If fps is still short, the analytics modules panel shows
+per-camera fps; search (CLIP) and pose are the optional costs.
+
+From the dashboard you can:
 
 - Switch between webcam, an uploaded file, or a bundled sample clip.
 - Draw a zone directly on the video (click points, "Finish Polygon"), then
