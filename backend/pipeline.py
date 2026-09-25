@@ -105,7 +105,7 @@ class FramePipeline:
             if wd.cls_name not in latest_by_class or wd.conf > latest_by_class[wd.cls_name].conf:
                 latest_by_class[wd.cls_name] = wd
         confirmed_classes = set(self.weapon_filter.update(
-            {c: wd.bbox for c, wd in latest_by_class.items()})) if weapon_evaluated else set()
+            {c: wd.bbox for c, wd in latest_by_class.items()}, frame_size=(width, height))) if weapon_evaluated else set()
 
         display_weapons = self._smooth_weapon_display(weapon_detections, confirmed_classes, timestamp)
 

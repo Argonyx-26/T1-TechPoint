@@ -40,7 +40,8 @@ WEAPON_FACE_PAD = 0.35        # head region = face keypoints padded by this x fa
 WEAPON_WRIST_REACH = 0.5      # "near a hand" = within this x shoulder width of the box
 # The 5-of-8 filter only counts hits near the current box: a knife lowered out
 # of view plus a flicker on a face elsewhere is not one sustained weapon.
-WEAPON_TRACK_DIST = 1.0       # centre distance, as a multiple of the larger box side
+WEAPON_TRACK_DIST = 1.0       # centre distance, as a multiple of the larger box side...
+WEAPON_TRACK_MIN_FRAC = 0.2   # ...but never less than this x the frame diagonal: a small gun being swung moves more than its own size between frames
 # Raw frame + raw detections + pose for every fired weapon alert.
 WEAPON_DEBUG_DIR = BASE_DIR / "debug" / "confirmed_alerts"
 

@@ -138,3 +138,18 @@ def test_pipeline_alert6_sitting_still_never_fires():
 
 def test_pipeline_real_knife_still_fires():
     assert _run(WeaponDetection("knife", 0.72, ALERT4_KNIFE_BOX), ALERT4_POSE)
+
+
+def test_small_gun_being_swung_is_one_weapon():
+    # m2-res_480p (270x480): a ~20 px gun moving 25-60 px between analysed
+    # frames. Measured in box sizes alone these never matched; the frame-size
+    # floor keeps them one weapon (the face-flicker case above is ~350 px away).
+    boxes = [(147, 203, 166, 222), (174, 208, 196, 230), (200, 213, 220, 231),
+             (218, 216, 237, 234), (160, 208, 180, 229), (184, 206, 207, 228), (218, 216, 237, 234)]
+    strict, fixed = WeaponTemporalFilter(window=8, min_hits=5, track_dist=1.0), WeaponTemporalFilter(window=8, min_hits=5, track_dist=1.0)
+    s = f = []
+    for b in [None] + boxes:
+        frame = {"pistol": b} if b else {}
+        s = strict.update(frame)
+        f = fixed.update(frame, frame_size=(270, 480))
+    assert s == [] and f == ["pistol"]

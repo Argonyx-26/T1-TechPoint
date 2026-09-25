@@ -15,12 +15,13 @@ from typing import Deque, Dict, List, Optional, Tuple, Union
 Box = Tuple[float, float, float, float]
 
 
-def _near(a: Box, b: Box, factor: float) -> bool:
-    """Centres within `factor` x the larger box side: the same object, moved a little."""
+def _near(a: Box, b: Box, factor: float, min_dist: float = 0.0) -> bool:
+    """Centres within `factor` x the larger box side (or min_dist, whichever
+    is larger): the same object, moved a little."""
     side = max(a[2] - a[0], a[3] - a[1], b[2] - b[0], b[3] - b[1])
     ax, ay = (a[0] + a[2]) / 2, (a[1] + a[3]) / 2
     bx, by = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
-    return ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 <= factor * side
+    return ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 <= max(factor * side, min_dist)
 
 
 class WeaponTemporalFilter:
@@ -36,7 +37,7 @@ class WeaponTemporalFilter:
         # per frame: class -> bbox (None when the caller only passes class names)
         self._history: Deque[Dict[str, Optional[Box]]] = deque(maxlen=window)
 
-    def update(self, detected: Union[set, Dict[str, Box]]) -> List[str]:
+    def update(self, detected: Union[set, Dict[str, Box]], frame_size: Optional[Tuple[int, int]] = None) -> List[str]:
         """Feed one frame's weapon detections: a {class: bbox} dict, or a bare
         set of class names (no location check). Returns the classes that are
         *sustained* as of this frame (i.e. hit the min_hits/window threshold)
@@ -44,6 +45,10 @@ class WeaponTemporalFilter:
         so flickers in different places never add up to one weapon.
         Cooldown/dedup against repeated firing is the alert manager's job."""
         frame = dict(detected) if isinstance(detected, dict) else {c: None for c in detected}
+        min_dist = 0.0
+        if frame_size:
+            from backend import config
+            min_dist = config.WEAPON_TRACK_MIN_FRAC * (frame_size[0] ** 2 + frame_size[1] ** 2) ** 0.5
         self._history.append(frame)
         if len(self._history) < self.window:
             return []
@@ -51,7 +56,7 @@ class WeaponTemporalFilter:
         for cls, box in frame.items():
             hits = sum(
                 1 for past in self._history
-                if cls in past and (box is None or past[cls] is None or _near(box, past[cls], self.track_dist))
+                if cls in past and (box is None or past[cls] is None or _near(box, past[cls], self.track_dist, min_dist))
             )
             if hits >= self.min_hits:
                 confirmed.append(cls)
