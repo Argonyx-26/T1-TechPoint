@@ -2411,10 +2411,33 @@ function handleSourceSelection(source) {
 
 
 /* =========================================
-   LAPTOP WEBCAM - BROWSER NATIVE
+   LAPTOP WEBCAM - BACKEND (AI) FIRST
 ========================================= */
 
+const BACKEND_OFFLINE_MSG = "Backend offline - preview only, no detection";
+
 async function connectLaptopWebcam() {
+    // The backend opens webcam 0 itself, so frames go through detection
+    try {
+        const data = await api("/source/camera", {
+            method: "POST",
+            body: JSON.stringify({ source: "0" })
+        });
+        updateStatusUI(data);
+        showVideo();
+        setPipelineStatus("LAPTOP WEBCAM • LIVE");
+        showToast("Laptop webcam connected");
+        logAudit("WEBCAM_CONNECTED", "Laptop webcam opened by backend");
+    } catch (error) {
+        console.warn(error);
+        showToast(BACKEND_OFFLINE_MSG);
+        logAudit("WEBCAM_BACKEND", error?.message || "Backend unavailable");
+        await connectBrowserWebcam();
+    }
+}
+
+/* Fallback only: browser preview, frames never reach the AI */
+async function connectBrowserWebcam() {
     stopLocalWebcam();
 
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -2437,7 +2460,7 @@ async function connectLaptopWebcam() {
         await localWebcam.play();
 
         showLocalVideo();
-        setPipelineStatus("LAPTOP WEBCAM • LIVE");
+        setPipelineStatus("LAPTOP WEBCAM • PREVIEW ONLY");
         systemStatus.textContent = "ACTIVE";
         activeSource.textContent = "LAPTOP WEBCAM";
         document.getElementById("feedSource").textContent = "SOURCE: LAPTOP WEBCAM";
@@ -2450,8 +2473,7 @@ async function connectLaptopWebcam() {
                 ? `${settings.width} × ${settings.height}`
                 : "LOCAL CAMERA";
 
-        showToast("Laptop webcam connected");
-        logAudit("WEBCAM_CONNECTED", "Laptop webcam opened in browser");
+        logAudit("WEBCAM_CONNECTED", "Laptop webcam opened in browser (no detection)");
 
     } catch (error) {
         console.warn(error);
@@ -2463,8 +2485,29 @@ async function connectLaptopWebcam() {
 
 
 /* =========================================
-   DROIDCAM DIRECT PREVIEW
+   DROIDCAM - BACKEND FIRST, DIRECT PREVIEW FALLBACK
 ========================================= */
+
+async function connectDroidCam(url) {
+    if (!url) return;
+
+    try {
+        const data = await api("/source/camera", {
+            method: "POST",
+            body: JSON.stringify({ source: url })
+        });
+        updateStatusUI(data);
+        showVideo();
+        setPipelineStatus("DROIDCAM • LIVE");
+        showToast("DroidCam connected");
+        logAudit("DROIDCAM_CONNECTED", `Backend: ${url}`);
+    } catch (error) {
+        console.warn(error);
+        showToast(BACKEND_OFFLINE_MSG);
+        logAudit("DROIDCAM_BACKEND", error?.message || "Backend unavailable");
+        connectDroidCamPreview(url);
+    }
+}
 
 function connectDroidCamPreview(url) {
     if (!url) return;
@@ -2479,13 +2522,12 @@ function connectDroidCamPreview(url) {
         logAudit("DROIDCAM_ERROR", `Could not load ${url}`);
     };
 
-    setPipelineStatus("DROIDCAM • LIVE PREVIEW");
     activeSource.textContent = "DROIDCAM";
     document.getElementById("feedSource").textContent = "SOURCE: DROIDCAM";
     systemStatus.textContent = "ACTIVE";
 
-    showToast("DroidCam preview connected");
-    logAudit("DROIDCAM_CONNECTED", url);
+    setPipelineStatus("DROIDCAM • PREVIEW ONLY");
+    logAudit("DROIDCAM_CONNECTED", `Direct preview (no detection): ${url}`);
 }
 
 document.getElementById("droidcam4747").addEventListener("click", () => {
@@ -2503,7 +2545,7 @@ document.getElementById("droidcam4747").addEventListener("click", () => {
     }
 
     value.value = `http://${host}:4747/video`;
-    connectDroidCamPreview(value.value);
+    connectDroidCam(value.value);
 });
 
 document.getElementById("droidcam4748").addEventListener("click", () => {
@@ -2521,7 +2563,7 @@ document.getElementById("droidcam4748").addEventListener("click", () => {
     }
 
     value.value = `http://${host}:4748/video`;
-    connectDroidCamPreview(value.value);
+    connectDroidCam(value.value);
 });
 
 
@@ -2546,22 +2588,8 @@ document
 
         const type = active?.dataset.source;
 
-        // DroidCam: try a direct browser preview first.
         if (type === "droidcam") {
-            connectDroidCamPreview(value);
-
-            // Also tell the FastAPI backend, if available.
-            try {
-                const data = await api("/source/camera", {
-                    method: "POST",
-                    body: JSON.stringify({ source: value })
-                });
-                updateStatusUI(data);
-                logAudit("DROIDCAM_BACKEND", "DroidCam registered with backend");
-            } catch {
-                logAudit("DROIDCAM_BACKEND", "Backend registration unavailable; local preview remains active");
-            }
-
+            await connectDroidCam(value);
             return;
         }
 
