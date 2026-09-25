@@ -81,6 +81,7 @@
           <button id="btnDrawZone" class="btn accent">+ Draw Zone</button>
           <button id="btnFinishZone" class="btn" hidden>Finish Polygon</button>
           <button id="btnCancelZone" class="btn ghost" hidden>Cancel</button>
+          <button id="btnSurgeSettings" class="btn">Crowd Surge...</button>
         </div>
       </div>
 
@@ -127,7 +128,7 @@
         <label>Name<input type="text" id="zoneName" placeholder="e.g. Main Entrance" /></label>
         <label class="checkbox-row"><input type="checkbox" id="zoneRestricted" /> Restricted (no-go area)</label>
         <label class="checkbox-row">
-          <input type="checkbox" id="zoneCrowdEnabled" /> Crowd-surge threshold
+          <input type="checkbox" id="zoneCrowdEnabled" /> Crowd threshold (+ surge)
           <input type="number" id="zoneCrowdThreshold" min="1" value="5" class="inline-num" />
         </label>
         <label class="checkbox-row">
@@ -137,6 +138,23 @@
         <p class="hint">To flag wrong-direction movement, draw the zone over a lane/doorway, then click two points on the feed after saving to set the allowed direction (optional - skip for now).</p>
         <div class="modal-actions">
           <button class="btn accent" id="zoneSaveBtn">Save Zone</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="surgeModalBackdrop" hidden>
+    <div class="modal">
+      <button class="modal-close" id="surgeModalClose">×</button>
+      <div class="modal-body">
+        <h3>Crowd Surge Settings</h3>
+        <p class="hint">Applies to zones with a crowd threshold. A surge (HIGH) fires when a zone's count rises by the minimum increase within the window, or exceeds the multiplier &times; its 60s average with at least the minimum people present.</p>
+        <label>Minimum increase (people)<input type="number" id="surgeMinIncrease" min="1" step="1" /></label>
+        <label>Within window (seconds)<input type="number" id="surgeWindowS" min="1" step="1" /></label>
+        <label>Or above average &times;<input type="number" id="surgeAvgMultiplier" min="1.1" step="0.1" /></label>
+        <label>Minimum people for the average check<input type="number" id="surgeMinPeople" min="1" step="1" /></label>
+        <div class="modal-actions">
+          <button class="btn accent" id="surgeSaveBtn">Save</button>
         </div>
       </div>
     </div>

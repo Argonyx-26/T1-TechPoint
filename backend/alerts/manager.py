@@ -9,9 +9,13 @@ from typing import Dict, List, Optional, Tuple
 
 from backend import config
 from backend.analytics import severity
-from backend.analytics.rules import RuleAlert
+from backend.analytics.rules import CROWD_SURGE, CROWD_THRESHOLD, RuleAlert
 
 WEAPON_RULE = "WEAPON"
+# Zone-level rules: the people inside change every frame, so cooldown is
+# per (rule, zone) -- keying on track ids would let every membership change
+# through as a "new" alert.
+ZONE_KEYED_RULES = {CROWD_THRESHOLD, CROWD_SURGE}
 
 _id_counter = itertools.count(1)
 
@@ -72,7 +76,10 @@ class AlertManager:
     def ingest_rule_alerts(self, rule_alerts: List[RuleAlert], frame=None) -> List[Alert]:
         created = []
         for ra in rule_alerts:
-            key = (ra.rule, ra.zone_id, tuple(sorted(ra.track_ids)))
+            if ra.rule in ZONE_KEYED_RULES:
+                key = (ra.rule, ra.zone_id)
+            else:
+                key = (ra.rule, ra.zone_id, tuple(sorted(ra.track_ids)))
             if self._on_cooldown(key, ra.timestamp):
                 continue
             self._last_fired[key] = ra.timestamp

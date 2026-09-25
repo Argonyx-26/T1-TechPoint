@@ -11,7 +11,7 @@ from typing import List, Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend import config
 from backend.app_state import app_state
@@ -123,6 +123,10 @@ class ThresholdsIn(BaseModel):
     unattended_radius_px: Optional[float] = None
     stationary_speed_px_s: Optional[float] = None
     wrong_direction_angle_deg: Optional[float] = None
+    surge_min_increase: Optional[int] = Field(None, ge=1)
+    surge_window_s: Optional[float] = Field(None, gt=0)
+    surge_avg_multiplier: Optional[float] = Field(None, gt=1)
+    surge_min_people: Optional[int] = Field(None, ge=1)
 
 
 @app.get("/api/thresholds")
@@ -135,6 +139,10 @@ def get_thresholds():
         "unattended_radius_px": engine.unattended_radius_px,
         "stationary_speed_px_s": engine.stationary_speed_px_s,
         "wrong_direction_angle_deg": engine.wrong_direction_angle_deg,
+        "surge_min_increase": engine.surge_min_increase,
+        "surge_window_s": engine.surge_window_s,
+        "surge_avg_multiplier": engine.surge_avg_multiplier,
+        "surge_min_people": engine.surge_min_people,
     }
 
 

@@ -1,7 +1,9 @@
 """Behavior-based anomaly rules layered on top of raw detection + tracking:
 
   * Loitering               -- person stationary in a zone past a time limit
-  * Crowd surge             -- person count in a zone exceeds a threshold
+  * Crowd threshold         -- person count in a zone reaches its limit (MEDIUM)
+  * Crowd surge             -- zone count jumps suddenly, or well above its
+                               recent average (HIGH)
   * Unattended object       -- an item is left behind once its owner departs
   * Restricted zone intrusion -- a person enters a marked no-go polygon
   * Wrong-direction movement  -- movement opposes a zone's allowed direction
@@ -10,6 +12,8 @@ Each rule is pure logic over `TrackState` + `Zone` objects (no ML involved),
 so it can be exercised with synthetic data independent of the detector.
 """
 import math
+import statistics
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -20,6 +24,7 @@ from backend.zones import Zone
 
 LOITERING = "LOITERING"
 CROWD_SURGE = "CROWD_SURGE"
+CROWD_THRESHOLD = "CROWD_THRESHOLD"
 UNATTENDED_OBJECT = "UNATTENDED_OBJECT"
 RESTRICTED_ZONE_INTRUSION = "RESTRICTED_ZONE_INTRUSION"
 WRONG_DIRECTION = "WRONG_DIRECTION"
@@ -34,6 +39,41 @@ class RuleAlert:
     bbox: Optional[Tuple[float, float, float, float]] = None
     zone_id: Optional[str] = None
     zone_name: Optional[str] = None
+
+
+class ZoneCountHistory:
+    """Per-zone person-count history for the surge rule.
+
+    Raw per-frame counts are median-smoothed over `smooth_s` first, so a
+    one-frame detector dropout (6 -> 0 -> 6) can't masquerade as a +6 rise,
+    and 5-6-5-6 flicker stays a flat ~5.5. Surge checks run on the smoothed
+    series only.
+    """
+
+    def __init__(self):
+        self._raw: deque = deque()       # (ts, raw count), last smooth_s seconds
+        self._smooth: deque = deque()    # (ts, smoothed count), last avg_window_s seconds
+        self.armed = True                # surge fires on the rising edge, re-arms once it clears
+
+    def add(self, ts: float, count: int, smooth_s: float, avg_window_s: float) -> float:
+        self._raw.append((ts, count))
+        while self._raw and self._raw[0][0] < ts - smooth_s:
+            self._raw.popleft()
+        smoothed = statistics.median_low(c for _, c in self._raw)
+        self._smooth.append((ts, smoothed))
+        while self._smooth and self._smooth[0][0] < ts - avg_window_s:
+            self._smooth.popleft()
+        return smoothed
+
+    def lowest_since(self, since_ts: float):
+        """(ts, count) of the most recent minimum in the window -- where a rise started."""
+        return min(((ts, c) for ts, c in self._smooth if ts >= since_ts), key=lambda x: (x[1], -x[0]))
+
+    def average(self) -> float:
+        return sum(c for _, c in self._smooth) / len(self._smooth)
+
+    def span_s(self) -> float:
+        return self._smooth[-1][0] - self._smooth[0][0] if self._smooth else 0.0
 
 
 def _zone_for_point(point, zones: List[Zone]) -> Optional[Zone]:
@@ -51,6 +91,12 @@ class RuleEngine:
     def __init__(self):
         self.loiter_seconds = config.LOITER_SECONDS
         self.crowd_threshold = config.CROWD_COUNT_THRESHOLD
+        self.surge_min_increase = config.SURGE_MIN_INCREASE
+        self.surge_window_s = config.SURGE_WINDOW_S
+        self.surge_avg_window_s = config.SURGE_AVG_WINDOW_S
+        self.surge_avg_multiplier = config.SURGE_AVG_MULTIPLIER
+        self.surge_min_people = config.SURGE_MIN_PEOPLE
+        self.surge_smooth_s = config.SURGE_SMOOTH_S
         self.unattended_seconds = config.UNATTENDED_SECONDS
         self.unattended_radius_px = config.UNATTENDED_RADIUS_PX
         self.stationary_speed_px_s = config.STATIONARY_SPEED_PX_S
@@ -60,6 +106,9 @@ class RuleEngine:
         self._dwell: Dict[Tuple[int, str], float] = {}
         self._dwell_last_ts: Dict[Tuple[int, str], float] = {}
         self._item_state: Dict[int, dict] = {}
+        self._zone_counts: Dict[str, ZoneCountHistory] = {}
+        # Latest raw person count per zone id, for the overlay / status API.
+        self.zone_counts: Dict[str, int] = {}
 
     def update_thresholds(self, **kwargs):
         for key, value in kwargs.items():
@@ -74,7 +123,7 @@ class RuleEngine:
 
         alerts: List[RuleAlert] = []
         alerts += self._check_restricted_zones(persons, zones, timestamp)
-        alerts += self._check_crowd_surge(persons, zones, timestamp)
+        alerts += self._check_crowd(persons, zones, timestamp)
         alerts += self._check_loitering(persons, zones, timestamp)
         alerts += self._check_wrong_direction(persons, zones, timestamp)
         alerts += self._check_unattended_objects(persons, items, zones, timestamp)
@@ -102,28 +151,77 @@ class RuleEngine:
                     )
         return alerts
 
-    def _check_crowd_surge(self, persons, zones, timestamp) -> List[RuleAlert]:
+    def _check_crowd(self, persons, zones, timestamp) -> List[RuleAlert]:
+        """Two crowd rules on zones with crowd monitoring enabled (a
+        crowd_threshold set): the absolute count limit (MEDIUM), and a surge
+        -- a sudden rise, or a count well above the zone's recent average
+        (HIGH). Every zone's live count is recorded for the overlay."""
         alerts = []
+        live_zone_ids = set()
         for zone in zones:
+            inside = [p for p in persons if point_in_polygon(p.centroid, zone.polygon)]
+            self.zone_counts[zone.id] = len(inside)
+            live_zone_ids.add(zone.id)
             if not zone.crowd_threshold:
                 continue
-            inside = [p for p in persons if point_in_polygon(p.centroid, zone.polygon)]
-            if len(inside) >= zone.crowd_threshold:
-                alerts.append(
-                    RuleAlert(
-                        rule=CROWD_SURGE,
-                        track_ids=[p.track_id for p in inside],
-                        message=(
-                            f"{len(inside)} people in '{zone.name}' "
-                            f"(threshold {zone.crowd_threshold})"
-                        ),
-                        timestamp=timestamp,
-                        bbox=inside[0].bbox if inside else None,
-                        zone_id=zone.id,
-                        zone_name=zone.name,
-                    )
+
+            def make(rule, message):
+                return RuleAlert(
+                    rule=rule,
+                    track_ids=[p.track_id for p in inside],
+                    message=message,
+                    timestamp=timestamp,
+                    bbox=inside[0].bbox if inside else None,
+                    zone_id=zone.id,
+                    zone_name=zone.name,
                 )
+
+            if len(inside) >= zone.crowd_threshold:
+                alerts.append(make(
+                    CROWD_THRESHOLD,
+                    f"Crowd threshold: {len(inside)} people in '{zone.name}' (threshold {zone.crowd_threshold})",
+                ))
+
+            surge = self._surge_message(zone, len(inside), timestamp)
+            if surge:
+                alerts.append(make(CROWD_SURGE, surge))
+
+        for zone_id in list(self._zone_counts):
+            if zone_id not in live_zone_ids:
+                del self._zone_counts[zone_id]
+        for zone_id in list(self.zone_counts):
+            if zone_id not in live_zone_ids:
+                del self.zone_counts[zone_id]
         return alerts
+
+    def _surge_message(self, zone, count: int, timestamp: float) -> Optional[str]:
+        hist = self._zone_counts.setdefault(zone.id, ZoneCountHistory())
+        now = hist.add(timestamp, count, self.surge_smooth_s, self.surge_avg_window_s)
+
+        from_ts, low = hist.lowest_since(timestamp - self.surge_window_s)
+        rose = now - low >= self.surge_min_increase
+        # The rolling-average check needs a real baseline, not the first
+        # few seconds after a zone is drawn or the feed starts.
+        avg = hist.average()
+        above_avg = (
+            hist.span_s() >= self.surge_window_s
+            and now >= self.surge_min_people
+            and now > self.surge_avg_multiplier * avg
+        )
+
+        if not (rose or above_avg):
+            hist.armed = True
+            return None
+        if not hist.armed:
+            return None  # still the same surge that already fired
+        hist.armed = False
+        if rose:
+            secs = max(1, round(timestamp - from_ts))
+            return f"Crowd surge in '{zone.name}': {low:g} -> {now:g} people in {secs}s"
+        return (
+            f"Crowd surge in '{zone.name}': {now:g} people vs "
+            f"{avg:.1f} avg over {self.surge_avg_window_s:.0f}s"
+        )
 
     def _check_loitering(self, persons, zones, timestamp) -> List[RuleAlert]:
         alerts = []

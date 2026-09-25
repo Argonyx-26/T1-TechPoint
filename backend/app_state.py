@@ -104,6 +104,7 @@ class AppState:
             "weapon_detector_enabled": self.pipeline.weapon_detector.enabled,
             "device": config.DEVICE,
             "objects": dict(self.pipeline.last_object_counts),
+            "zone_counts": dict(self.pipeline.rule_engine.zone_counts),
             "capture_ms": capture_ms,
             "inference_ms": inference_ms,
             "uptime_seconds": round(time.time() - self._start_time),

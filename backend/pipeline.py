@@ -24,6 +24,8 @@ BOX_COLOR_OTHER = (180, 180, 180)
 BOX_COLOR_WEAPON = (0, 0, 255)
 ZONE_COLOR_RESTRICTED = (0, 0, 220)
 ZONE_COLOR_NORMAL = (0, 200, 0)
+ZONE_COLOR_CROWD_WARN = (0, 191, 255)   # amber: above CROWD_WARN_FRACTION of the threshold
+ZONE_COLOR_CROWD_OVER = (0, 0, 255)     # red: at/over the threshold (the alert fires here too)
 
 
 class FramePipeline:
@@ -143,16 +145,31 @@ class FramePipeline:
         self.last_object_counts = counts
 
     def _draw_zones(self, frame, zones: List[Zone]):
+        counts = self.rule_engine.zone_counts
         for zone in zones:
             if not zone.polygon:
                 continue
             pts = np.array(zone.polygon, dtype=np.int32).reshape((-1, 1, 2))
             color = ZONE_COLOR_RESTRICTED if zone.restricted else ZONE_COLOR_NORMAL
+            count = counts.get(zone.id, 0)
+            label = f"{zone.name}: {count}"
+            if zone.crowd_threshold:
+                label += f"/{zone.crowd_threshold}"
+                crowd_color = None
+                if count >= zone.crowd_threshold:
+                    crowd_color = ZONE_COLOR_CROWD_OVER
+                elif count > config.CROWD_WARN_FRACTION * zone.crowd_threshold:
+                    crowd_color = ZONE_COLOR_CROWD_WARN
+                if crowd_color is not None:
+                    color = crowd_color
+                    tint = frame.copy()
+                    cv2.fillPoly(tint, [pts], color)
+                    cv2.addWeighted(tint, 0.2, frame, 0.8, 0, dst=frame)
             cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=2)
             x, y = zone.polygon[0]
             cv2.putText(
-                frame, zone.name, (int(x), int(y) - 8),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2,
+                frame, label, (int(x), int(y) - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
             )
 
     def _draw_tracks(self, frame, tracks):

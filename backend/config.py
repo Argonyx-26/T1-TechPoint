@@ -53,6 +53,13 @@ ITEM_CLASSES = {"backpack", "handbag", "suitcase"}
 # --- Rule thresholds (all runtime-adjustable via /api/thresholds) -----------
 LOITER_SECONDS = 8.0                 # time stationary-in-zone before flagging
 CROWD_COUNT_THRESHOLD = 5            # person count in a zone before flagging
+SURGE_MIN_INCREASE = 4               # zone count rising by this much...
+SURGE_WINDOW_S = 10.0                # ...within this many seconds = surge
+SURGE_AVG_WINDOW_S = 60.0            # rolling-average window for the relative surge check
+SURGE_AVG_MULTIPLIER = 1.5           # count above this x its rolling average = surge...
+SURGE_MIN_PEOPLE = 3                 # ...but only with at least this many people present
+SURGE_SMOOTH_S = 1.0                 # median-smooth zone counts over this window (kills 1-frame detector dropouts)
+CROWD_WARN_FRACTION = 0.7            # overlay turns amber above this fraction of a zone's crowd threshold
 UNATTENDED_SECONDS = 10.0            # time an item sits alone before flagging
 UNATTENDED_RADIUS_PX = 120           # "near" radius for item<->person association
 STATIONARY_SPEED_PX_S = 40.0         # centroid speed below this = "stationary"
@@ -66,7 +73,8 @@ SEVERITY_WEIGHTS = {
     "WEAPON": 100,
     "UNATTENDED_OBJECT": 80,
     "RESTRICTED_ZONE_INTRUSION": 75,
-    "CROWD_SURGE": 55,
+    "CROWD_SURGE": 70,       # sudden rise -> HIGH
+    "CROWD_THRESHOLD": 55,   # absolute count over the zone limit -> MEDIUM
     "WRONG_DIRECTION": 45,
     "LOITERING": 30,
 }

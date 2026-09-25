@@ -22,6 +22,7 @@
     WEAPON: "⚠",
     RESTRICTED_ZONE_INTRUSION: "⛔",
     CROWD_SURGE: "👥",
+    CROWD_THRESHOLD: "👥",
     UNATTENDED_OBJECT: "🎒",
     WRONG_DIRECTION: "↩",
     LOITERING: "⏱",
@@ -35,6 +36,7 @@
     WEAPON: ["Alert on-site security immediately", "Do not approach — maintain distance", "Evacuate the immediate area", "Notify law enforcement"],
     RESTRICTED_ZONE_INTRUSION: ["Dispatch security to the zone", "Verify occupant authorization", "Review recent zone access"],
     CROWD_SURGE: ["Deploy crowd control to the zone", "Open additional exits if available", "Monitor for further buildup"],
+    CROWD_THRESHOLD: ["Monitor the zone for further buildup", "Prepare crowd control if it keeps rising"],
     UNATTENDED_OBJECT: ["Cordon off the immediate area", "Do not touch the object", "Notify security / bomb disposal per protocol"],
     WRONG_DIRECTION: ["Alert nearest staff member", "Check for blocked or malfunctioning exit"],
     LOITERING: ["Dispatch patrol to verify", "Review zone camera history"],
@@ -336,7 +338,7 @@
       const label = document.createElement("span");
       const tags = [];
       if (zone.restricted) tags.push("restricted");
-      if (zone.crowd_threshold) tags.push(`crowd>${zone.crowd_threshold}`);
+      if (zone.crowd_threshold) tags.push(`crowd≥${zone.crowd_threshold}`);
       if (zone.loiter_seconds) tags.push(`loiter>${zone.loiter_seconds}s`);
       label.textContent = `${zone.name}${tags.length ? " · " + tags.join(", ") : ""}`;
       const del = document.createElement("button");
@@ -355,6 +357,39 @@
       zoneListEl.appendChild(chip);
     }
   }
+
+  // ---------- crowd surge settings (GET/POST /api/thresholds) ----------
+  const surgeModalBackdrop = document.getElementById("surgeModalBackdrop");
+  const SURGE_FIELDS = {
+    surge_min_increase: document.getElementById("surgeMinIncrease"),
+    surge_window_s: document.getElementById("surgeWindowS"),
+    surge_avg_multiplier: document.getElementById("surgeAvgMultiplier"),
+    surge_min_people: document.getElementById("surgeMinPeople"),
+  };
+  document.getElementById("btnSurgeSettings").addEventListener("click", async () => {
+    const res = await fetch("/api/thresholds");
+    const t = await res.json();
+    for (const [key, input] of Object.entries(SURGE_FIELDS)) input.value = t[key];
+    surgeModalBackdrop.hidden = false;
+  });
+  document.getElementById("surgeModalClose").addEventListener("click", () => (surgeModalBackdrop.hidden = true));
+  document.getElementById("surgeSaveBtn").addEventListener("click", async () => {
+    const body = {};
+    for (const [key, input] of Object.entries(SURGE_FIELDS)) {
+      const v = parseFloat(input.value);
+      if (!Number.isNaN(v)) body[key] = v;
+    }
+    const res = await fetch("/api/thresholds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      alert("Invalid surge settings: " + (await res.text()));
+      return;
+    }
+    surgeModalBackdrop.hidden = true;
+  });
 
   // ---------- status polling ----------
   async function fetchStatus() {
