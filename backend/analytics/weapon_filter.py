@@ -36,8 +36,10 @@ class WeaponTemporalFilter:
         self.track_dist = track_dist
         # per frame: class -> bbox (None when the caller only passes class names)
         self._history: Deque[Dict[str, Optional[Box]]] = deque(maxlen=window)
+        self._confs: Deque[Dict[str, float]] = deque(maxlen=window)
 
-    def update(self, detected: Union[set, Dict[str, Box]], frame_size: Optional[Tuple[int, int]] = None) -> List[str]:
+    def update(self, detected: Union[set, Dict[str, Box]], frame_size: Optional[Tuple[int, int]] = None,
+               confs: Optional[Dict[str, float]] = None) -> List[str]:
         """Feed one frame's weapon detections: a {class: bbox} dict, or a bare
         set of class names (no location check). Returns the classes that are
         *sustained* as of this frame (i.e. hit the min_hits/window threshold)
@@ -50,14 +52,15 @@ class WeaponTemporalFilter:
             from backend import config
             min_dist = config.WEAPON_TRACK_MIN_FRAC * (frame_size[0] ** 2 + frame_size[1] ** 2) ** 0.5
         self._history.append(frame)
-        if len(self._history) < self.window:
-            return []
+        self._confs.append(dict(confs or {}))
+        from backend import config
         confirmed = []
         for cls, box in frame.items():
-            hits = sum(
-                1 for past in self._history
-                if cls in past and (box is None or past[cls] is None or _near(box, past[cls], self.track_dist, min_dist))
-            )
-            if hits >= self.min_hits:
+            same = [i for i, past in enumerate(self._history)
+                    if cls in past and (box is None or past[cls] is None or _near(box, past[cls], self.track_dist, min_dist))]
+            if len(self._history) >= self.window and len(same) >= self.min_hits:
                 confirmed.append(cls)
+            elif confs is not None and sum(
+                    1 for i in same if self._confs[i].get(cls, 0.0) >= config.WEAPON_STRONG_CONF) >= config.WEAPON_STRONG_HITS:
+                confirmed.append(cls)   # fast path: two very confident sightings at the same spot
         return confirmed

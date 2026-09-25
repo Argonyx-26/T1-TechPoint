@@ -153,3 +153,21 @@ def test_small_gun_being_swung_is_one_weapon():
         s = strict.update(frame)
         f = fixed.update(frame, frame_size=(270, 480))
     assert s == [] and f == ["pistol"]
+
+
+def test_two_very_confident_sightings_confirm_at_once():
+    # m2-res_480p: the gun is strong (>= 0.70) in only a couple of frames per
+    # 4.6 s play, never 5 of 8, so it used to take minutes of looping
+    wf = WeaponTemporalFilter(window=8, min_hits=5, track_dist=1.0)
+    frames = [({}, {}), ({"pistol": (160, 208, 180, 229)}, {"pistol": 0.74}),
+              ({"pistol": (184, 206, 207, 228)}, {"pistol": 0.61}),
+              ({"pistol": (218, 216, 237, 234)}, {"pistol": 0.76})]
+    out = [wf.update(b, frame_size=(270, 480), confs=c) for b, c in frames]
+    assert out[-1] == ["pistol"] and out[1] == []
+
+
+def test_one_confident_sighting_alone_does_not_confirm():
+    wf = WeaponTemporalFilter(window=8, min_hits=5, track_dist=1.0)
+    out = [wf.update(b, frame_size=(640, 480), confs=c) for b, c in
+           [({"knife": (100, 100, 130, 200)}, {"knife": 0.8})] + [({}, {})] * 7]
+    assert not any(out)

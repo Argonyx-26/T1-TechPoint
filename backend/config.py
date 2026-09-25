@@ -41,6 +41,10 @@ WEAPON_WRIST_REACH = 0.5      # "near a hand" = within this x shoulder width of 
 # The 5-of-8 filter only counts hits near the current box: a knife lowered out
 # of view plus a flicker on a face elsewhere is not one sustained weapon.
 WEAPON_TRACK_DIST = 1.0       # centre distance, as a multiple of the larger box side...
+WEAPON_STRONG_CONF = 0.70     # fast path: a weapon this confident...
+WEAPON_STRONG_HITS = 2         # ...seen this many times in the window, same spot, confirms at once
+                               # (a gun shown briefly: m2-res_480p has 0.74 + 0.76 at the end of its
+                               # first 4.6 s play, but never 5 of 8 frames, so it took minutes of loops)
 WEAPON_TRACK_MIN_FRAC = 0.2   # ...but never less than this x the frame diagonal: a small gun being swung moves more than its own size between frames
 # Raw frame + raw detections + pose for every fired weapon alert.
 WEAPON_DEBUG_DIR = BASE_DIR / "debug" / "confirmed_alerts"
