@@ -774,6 +774,47 @@ textarea:focus {
 
 .alert-item.simulated { opacity: 0.8; border-style: dashed; }
 
+.alert-item.acknowledged { opacity: 0.45; }
+.alert-item.acknowledged .alert-type::after {
+    content: " \2713 ACK";
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--wasabi);
+}
+
+.chain-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(128, 144, 118, 0.18);
+    color: var(--wasabi);
+    white-space: nowrap;
+}
+.chain-badge.verified { background: rgba(88, 170, 110, 0.18); color: #8fd19e; }
+.chain-badge.tampered { background: rgba(191, 60, 39, 0.28); color: #ff8a6a; }
+
+.audit-actor {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--wasabi-dim);
+    margin-left: 6px;
+}
+
+.modal-ack-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 22px 22px;
+}
+.modal-ack-row .ack-note {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
 
 /* =========================================================
    THRESHOLDS
@@ -1956,6 +1997,7 @@ textarea:focus {
                         <span class="section-kicker">SYSTEM TRACE</span>
                         <h2>Audit Log</h2>
                     </div>
+                    <span class="chain-badge" id="chainBadge" title="Hash-chain verification of the backend audit log">CHECKING...</span>
                     <span class="alert-counter" id="auditCount">0</span>
                 </div>
 
@@ -1965,7 +2007,7 @@ textarea:focus {
 
                 <div class="audit-footer">
                     <button class="secondary-btn" id="exportAudit">EXPORT</button>
-                    <button class="secondary-btn" id="clearAudit">CLEAR</button>
+                    <button class="secondary-btn" id="clearAudit" title="Hides entries on screen; the log itself is append-only">HIDE</button>
                 </div>
 
             </section>
@@ -2059,6 +2101,11 @@ textarea:focus {
         </div>
 
         <ol class="modal-actions-list hidden" id="modalActions"></ol>
+
+        <div class="modal-ack-row">
+            <button class="primary-btn" id="ackAlert">ACKNOWLEDGE</button>
+            <span class="ack-note" id="ackNote"></span>
+        </div>
 
     </div>
 
@@ -2375,7 +2422,6 @@ async function loadAlerts() {
                 playAlarmSound();
                 document.getElementById("incidentStatus").textContent = "INCIDENT DETECTED";
                 showToast(newCritical[0].message);
-                logAudit("CRITICAL_ALERT", newCritical[0].message);
                 openEvidence(newCritical[0]);
             }
         }
@@ -2425,7 +2471,7 @@ function renderAlerts() {
         const item = document.createElement("div");
 
         item.className =
-            `alert-item ${severity}${alert.simulated ? " simulated" : ""}`;
+            `alert-item ${severity}${alert.simulated ? " simulated" : ""}${alert.acknowledged ? " acknowledged" : ""}`;
 
         item.innerHTML = `
 
@@ -2508,8 +2554,36 @@ function openEvidence(alert) {
         actionsList.classList.add("hidden");
     }
 
+    const ackButton = document.getElementById("ackAlert");
+    const ackNote = document.getElementById("ackNote");
+    ackButton.dataset.alertId = alert.simulated ? "" : alert.id;
+    ackButton.disabled = Boolean(alert.simulated || alert.acknowledged);
+    ackNote.textContent = alert.acknowledged
+        ? `Acknowledged by ${alert.acknowledged_by} at ${formatAlertTime(alert.acknowledged_at)}`
+        : alert.simulated ? "Simulated drill - nothing to acknowledge" : "";
+
     evidenceModal.classList.add("show");
 }
+
+document.getElementById("ackAlert").addEventListener("click", async () => {
+    const button = document.getElementById("ackAlert");
+    const id = button.dataset.alertId;
+    if (!id) return;
+    try {
+        const acked = await api(`/alerts/${id}/ack`, {
+            method: "POST",
+            body: JSON.stringify({ who: "operator" })
+        });
+        button.disabled = true;
+        document.getElementById("ackNote").textContent =
+            `Acknowledged by ${acked.acknowledged_by} at ${formatAlertTime(acked.acknowledged_at)}`;
+        showToast("Alert acknowledged");
+        loadAlerts();
+        loadAudit();
+    } catch (error) {
+        showToast(`Acknowledge failed: ${error.message}`);
+    }
+});
 
 
 document
@@ -2589,7 +2663,6 @@ function handleSourceSelection(source) {
         droidcamPresets.classList.remove("hidden");
         value.placeholder = "Phone IP or DroidCam URL, e.g. http://192.168.1.20:4747/video";
         setPipelineStatus("DROIDCAM READY");
-        logAudit("SOURCE_SELECTED", "DroidCam input selected");
         return;
     }
 
@@ -2597,7 +2670,6 @@ function handleSourceSelection(source) {
         input.classList.remove("hidden");
         value.placeholder = "Camera index (0, 1, ...) or IP / MJPEG URL";
         setPipelineStatus("NETWORK CAMERA READY");
-        logAudit("SOURCE_SELECTED", "Network camera input selected");
         return;
     }
 
@@ -2606,7 +2678,6 @@ function handleSourceSelection(source) {
         value.placeholder = "Pick a sample clip";
         loadSamples();
         setPipelineStatus("SAMPLE VIDEO READY");
-        logAudit("SOURCE_SELECTED", "Sample video input selected");
         return;
     }
 
@@ -2662,7 +2733,6 @@ async function connectSource(type, value) {
         updateStatusUI(data);
         showVideo();
         setPipelineStatus(`${labels[type]} • LIVE`);
-        logAudit("SOURCE_CONNECTED", `${labels[type]}: ${value}`);
         showToast(`${labels[type].toLowerCase()} connected`);
 
     } catch (error) {
@@ -2797,7 +2867,6 @@ document
             updateStatusUI(data);
             showVideo();
             setPipelineStatus("UPLOADED VIDEO • LIVE");
-            logAudit("VIDEO_UPLOADED", file.name);
             showToast("Video uploaded");
 
         } catch (error) {
@@ -2911,7 +2980,6 @@ function finishCurrentZone() {
     drawingZone = false;
     drawPolygon();
     showToast("Zone shape ready - save it");
-    logAudit("ZONE_DRAWN", `${currentPolygon.length}-point polygon prepared`);
 }
 
 function crowdState(zone) {
@@ -3036,7 +3104,6 @@ function renderZoneList() {
             try {
                 await saveZones();
                 showToast("Zone deleted");
-                logAudit("ZONE_DELETED", removed?.name || id);
             } catch (error) {
                 showToast(`Zone delete failed: ${error.message}`);
                 await loadZones();
@@ -3069,7 +3136,6 @@ document.getElementById("clearZones").addEventListener("click", async () => {
 
     try {
         await saveZones();
-        logAudit("ZONES_CLEARED", "All detection zones removed");
         showToast("All zones cleared");
     } catch (error) {
         zones = previous;
@@ -3123,8 +3189,6 @@ document.getElementById("saveZone").addEventListener("click", async () => {
     try {
         await saveZones();
         showToast("Zone saved");
-        logAudit("ZONE_SAVED", `${name} • ${restricted ? "restricted" : "monitored"}` +
-            (zone.crowd_threshold ? ` • crowd ≥${zone.crowd_threshold}` : ""));
     } catch (error) {
         zones.pop();
         showToast(`Zone not saved: ${error.message}`);
@@ -3162,68 +3226,77 @@ async function loadZones() {
 
 
 /* =========================================
-   AUDIT LOG (kept in this browser only)
+   AUDIT LOG
+   The backend keeps an append-only, hash-chained
+   log. This panel only reads it; HIDE hides what
+   is on screen, it never deletes anything.
 ========================================= */
 
-const AUDIT_KEY = "vigil_audit_log";
+const AUDIT_HIDE_KEY = "vigil_audit_hidden_before";
 
 let auditLog = [];
+let auditHiddenBefore = 0;
 
-function loadAuditLog() {
-    try {
-        const stored = JSON.parse(localStorage.getItem(AUDIT_KEY) || "[]");
-        auditLog = Array.isArray(stored) ? stored : [];
-    } catch {
-        auditLog = [];
-    }
+try {
+    auditHiddenBefore = Number(localStorage.getItem(AUDIT_HIDE_KEY)) || 0;
+} catch {}
 
-    renderAuditLog();
+// Operator events that only the dashboard knows about. Everything the
+// backend does itself (sources, zones, thresholds, alerts) it logs itself.
+function logAudit(action, detail = "", extra = {}) {
+    api("/audit", {
+        method: "POST",
+        body: JSON.stringify({ action, detail: String(detail), ...extra })
+    }).then(loadAudit).catch(() => {});
 }
 
-function persistAuditLog() {
+async function loadAudit() {
     try {
-        localStorage.setItem(AUDIT_KEY, JSON.stringify(auditLog));
+        auditLog = await api("/audit?limit=200");
+        renderAuditLog();
     } catch {}
 }
 
-function logAudit(action, detail = "") {
-    const entry = {
-        id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        action,
-        detail,
-        timestamp: new Date().toISOString()
-    };
-
-    auditLog.unshift(entry);
-    auditLog = auditLog.slice(0, 250);
-
-    persistAuditLog();
-    renderAuditLog();
+async function verifyAudit() {
+    const badge = document.getElementById("chainBadge");
+    try {
+        const result = await api("/audit/verify");
+        badge.classList.toggle("verified", result.ok);
+        badge.classList.toggle("tampered", !result.ok);
+        badge.textContent = result.ok
+            ? `CHAIN VERIFIED (${result.entries})`
+            : `TAMPERED at #${result.broken_at}`;
+    } catch {
+        badge.classList.remove("verified", "tampered");
+        badge.textContent = "UNAVAILABLE";
+    }
 }
 
 function renderAuditLog() {
     const list = document.getElementById("auditList");
     const count = document.getElementById("auditCount");
+    const visible = auditLog.filter(entry => entry.id > auditHiddenBefore);
 
-    count.textContent = auditLog.length;
+    count.textContent = visible.length;
 
-    if (!auditLog.length) {
-        list.innerHTML = `<div class="audit-empty">No recorded actions.</div>`;
+    if (!visible.length) {
+        list.innerHTML = `<div class="audit-empty">No recorded actions${auditHiddenBefore ? " (older entries hidden)" : ""}.</div>`;
         return;
     }
 
-    list.innerHTML = auditLog.slice(0, 60).map(entry => {
-        const date = new Date(entry.timestamp);
+    list.innerHTML = visible.slice(0, 60).map(entry => {
+        const date = new Date(entry.ts * 1000);
+        const where = entry.camera_id ? ` [${entry.camera_id}]` : "";
 
         return `
             <div class="audit-item">
                 <div class="audit-item-top">
-                    <span class="audit-action">${escapeHTML(entry.action)}</span>
+                    <span class="audit-action">#${entry.id} ${escapeHTML(entry.action)}<span class="audit-actor">${escapeHTML(entry.actor.toUpperCase())}</span></span>
                     <span class="audit-time">${escapeHTML(
                         date.toLocaleTimeString("en-IN", { hour12: false })
                     )}</span>
                 </div>
-                <div class="audit-detail">${escapeHTML(entry.detail || "-")}</div>
+                <div class="audit-detail">${escapeHTML((entry.detail || "-") + where)}</div>
             </div>
         `;
     }).join("");
@@ -3246,15 +3319,17 @@ function downloadJSON(data, filename) {
 }
 
 document.getElementById("clearAudit").addEventListener("click", () => {
-    auditLog = [];
-    try { localStorage.removeItem(AUDIT_KEY); } catch {}
+    auditHiddenBefore = auditLog.length ? auditLog[0].id : auditHiddenBefore;
+    try { localStorage.setItem(AUDIT_HIDE_KEY, String(auditHiddenBefore)); } catch {}
     renderAuditLog();
-    showToast("Audit log cleared");
+    showToast("Entries hidden on screen - the audit log itself is unchanged");
 });
 
 document.getElementById("exportAudit").addEventListener("click", () => {
-    downloadJSON(auditLog, `vigil-audit-${new Date().toISOString().slice(0, 10)}.json`);
-    logAudit("AUDIT_EXPORTED", "Audit log exported as JSON");
+    const link = document.createElement("a");
+    link.href = `${API}/audit/export?format=csv`;
+    link.click();
+    logAudit("AUDIT_EXPORTED", "Audit log exported as CSV");
     showToast("Audit log exported");
 });
 
@@ -3303,7 +3378,6 @@ document
             }));
 
             showToast("Thresholds applied");
-            logAudit("THRESHOLDS_APPLIED", JSON.stringify(values));
 
         } catch (error) {
 
@@ -3382,7 +3456,6 @@ document
         document.getElementById("incidentStatus").textContent = "NO INCIDENT";
 
         showToast("Alerts cleared");
-        logAudit("ALERTS_CLEARED", "Active alert list cleared");
 
     });
 
@@ -3441,14 +3514,15 @@ function escapeHTML(value) {
 
 async function initialize() {
 
-    loadAuditLog();
     renderZoneList();
+    loadAudit();
+    verifyAudit();
 
     // The webcam tile is highlighted by the markup, but nothing starts
     // until the analyst picks a source - the backend boots idle.
     sourceButtons.forEach(btn => btn.classList.remove("active"));
 
-    logAudit("SYSTEM_READY", "VIGIL dashboard initialized");
+    logAudit("DASHBOARD_OPENED", navigator.userAgent.split(") ")[0] + ")");
 
     await Promise.all([
         loadStatus(),
@@ -3470,6 +3544,17 @@ initialize();
 setInterval(loadStatus, 1000);
 
 setInterval(loadAlerts, 2000);
+
+setInterval(() => {
+    loadAudit();
+    verifyAudit();
+}, 3000);
+
+// Zones can change from another dashboard or the API; don't clobber a
+// polygon the operator is in the middle of drawing.
+setInterval(() => {
+    if (!currentPolygon.length) loadZones();
+}, 5000);
 </script>
 
 </body>

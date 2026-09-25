@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 from backend import config
 from backend.analytics import severity
 from backend.analytics.rules import CROWD_SURGE, CROWD_THRESHOLD, RuleAlert
+from backend.audit import audit
 
 WEAPON_RULE = "WEAPON"
 # Zone-level rules: the people inside change every frame, so cooldown is
@@ -34,6 +35,8 @@ class Alert:
     zone_name: Optional[str] = None
     bbox: Optional[Tuple[float, float, float, float]] = None
     evidence_path: Optional[str] = None
+    acknowledged_by: Optional[str] = None
+    acknowledged_at: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {
@@ -53,6 +56,9 @@ class Alert:
             "zone_name": self.zone_name,
             "bbox": self.bbox,
             "has_evidence": self.evidence_path is not None,
+            "acknowledged": self.acknowledged_at is not None,
+            "acknowledged_by": self.acknowledged_by,
+            "acknowledged_at": self.acknowledged_at,
         }
 
 
@@ -152,6 +158,22 @@ class AlertManager:
             self._total_count += 1
             if len(self._alerts) > self._max_alerts:
                 self._alerts = self._alerts[-self._max_alerts :]
+        audit("ALERT_FIRED", f"{alert.band} {alert.rule}: {alert.message}", alert_id=alert.id)
+
+    def acknowledge(self, alert_id: int, who: str = "operator") -> Optional[Alert]:
+        with self._lock:
+            alert = next((a for a in self._alerts if a.id == alert_id), None)
+            if alert is None:
+                return None
+            if alert.acknowledged_at is None:
+                alert.acknowledged_by = who
+                alert.acknowledged_at = time.time()
+                first = True
+            else:
+                first = False
+        if first:
+            audit("ALERT_ACKNOWLEDGED", f"{alert.rule}: {alert.message}", actor="operator", alert_id=alert_id)
+        return alert
 
     def ranked(self, limit: int = 50) -> List[Alert]:
         with self._lock:

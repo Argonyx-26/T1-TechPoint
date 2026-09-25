@@ -33,6 +33,9 @@ class ObjectDetector:
         from ultralytics import YOLO  # local import: heavy, optional at import time
 
         self._model = YOLO(self.model_path)
+        from backend.audit import audit
+
+        audit("MODEL_LOADED", f"general detector: {self.model_path}")
 
     def infer(self, frame) -> List[Detection]:
         """Run detection + tracking on a single BGR frame (numpy array)."""

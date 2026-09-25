@@ -9,12 +9,13 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend import config
 from backend.app_state import app_state
+from backend.audit import audit, get_audit
 from backend.zones import Zone
 
 FRONTEND_DIR = config.BASE_DIR / "frontend"
@@ -24,8 +25,10 @@ FRONTEND_DIR = config.BASE_DIR / "frontend"
 async def lifespan(app: FastAPI):
     # No auto-started source on boot -- the dashboard opens idle, and the
     # analyst explicitly picks Webcam / Connect / Upload / a sample clip.
+    audit("SERVER_START", f"device {config.DEVICE}, weapon model {config.WEAPON_MODEL_PATH.name}")
     yield
     app_state.stop()
+    audit("SERVER_STOP", "shutdown")
 
 
 app = FastAPI(title="Vigil Threat Detection & Situational Awareness", lifespan=lifespan)
@@ -80,7 +83,22 @@ def get_alerts(limit: int = 50):
 def clear_alerts():
     """Clear the alert feed (analyst acknowledged). Cooldowns are kept, so a
     still-ongoing event doesn't instantly re-fire the moment it's cleared."""
-    return {"ok": True, "cleared": app_state.pipeline.alert_manager.clear()}
+    cleared = app_state.pipeline.alert_manager.clear()
+    audit("ALERTS_CLEARED", f"{cleared} alert(s) cleared from the feed", actor="operator")
+    return {"ok": True, "cleared": cleared}
+
+
+class AckIn(BaseModel):
+    who: str = "operator"
+
+
+@app.post("/api/alerts/{alert_id}/ack")
+def acknowledge_alert(alert_id: int, body: Optional[AckIn] = None):
+    who = (body.who if body else "operator")[:64]
+    alert = app_state.pipeline.alert_manager.acknowledge(alert_id, who)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return alert.to_dict()
 
 
 @app.get("/api/alerts/{alert_id}/evidence")
@@ -145,7 +163,22 @@ def set_zones(zones: List[ZoneIn]):
         for z in zones
     ]
     app_state.pipeline.zone_store.replace_all(parsed)
+    if parsed:
+        audit("ZONES_SAVED", ", ".join(_zone_summary(z) for z in parsed), actor="operator")
+    else:
+        audit("ZONES_CLEARED", "all zones removed", actor="operator")
     return {"ok": True, "count": len(parsed)}
+
+
+def _zone_summary(z: Zone) -> str:
+    parts = [z.name]
+    if z.restricted:
+        parts.append("restricted")
+    if z.crowd_threshold:
+        parts.append(f"crowd>={z.crowd_threshold}")
+    if z.loiter_seconds:
+        parts.append(f"loiter {z.loiter_seconds}s")
+    return " ".join(parts)
 
 
 class ThresholdsIn(BaseModel):
@@ -180,8 +213,47 @@ def get_thresholds():
 
 @app.post("/api/thresholds")
 def set_thresholds(thresholds: ThresholdsIn):
-    app_state.pipeline.rule_engine.update_thresholds(**thresholds.dict(exclude_none=True))
+    values = thresholds.dict(exclude_none=True)
+    app_state.pipeline.rule_engine.update_thresholds(**values)
+    audit("THRESHOLDS_CHANGED", ", ".join(f"{k}={v}" for k, v in values.items()), actor="operator")
     return get_thresholds()
+
+
+# ---------- audit log ----------
+class AuditIn(BaseModel):
+    action: str = Field(..., min_length=1, max_length=64)
+    detail: str = Field("", max_length=2000)
+    camera_id: Optional[str] = None
+    alert_id: Optional[int] = None
+
+
+@app.post("/api/audit")
+def post_audit(entry: AuditIn):
+    """Operator events from the dashboard (the log itself is append-only)."""
+    return audit(entry.action, entry.detail, actor="operator",
+                 camera_id=entry.camera_id, alert_id=entry.alert_id) or {"ok": False}
+
+
+@app.get("/api/audit")
+def list_audit(limit: int = 200, action: Optional[str] = None, camera_id: Optional[str] = None):
+    return get_audit().list(limit=limit, action=action, camera_id=camera_id)
+
+
+@app.get("/api/audit/verify")
+def verify_audit():
+    return get_audit().verify()
+
+
+@app.get("/api/audit/export")
+def export_audit(format: str = "csv"):
+    if format not in ("csv", "json"):
+        raise HTTPException(status_code=400, detail="format must be csv or json")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return Response(
+        get_audit().export(format),
+        media_type="text/csv" if format == "csv" else "application/json",
+        headers={"Content-Disposition": f'attachment; filename="vigil-audit-{stamp}.{format}"'},
+    )
 
 
 @app.get("/api/samples")

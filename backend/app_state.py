@@ -8,6 +8,7 @@ from typing import Optional, Union
 import cv2
 
 from backend import config
+from backend.audit import audit
 from backend.pipeline import FramePipeline
 from backend.video_source import VideoSource
 
@@ -46,6 +47,7 @@ class AppState:
 
     def switch_source(self, source: Union[int, str], label: str):
         self.start(source, label)
+        audit("SOURCE_CHANGED", label, actor="operator")
 
     def _loop(self):
         last_ts = time.time()

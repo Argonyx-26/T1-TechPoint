@@ -103,5 +103,12 @@ SAMPLE_DATA_DIR = BASE_DIR / "sample_data"
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- Audit log (append-only, hash-chained; see backend/audit.py) -------------
+AUDIT_ENABLED = True
+AUDIT_DB = Path(os.environ.get("ARGONYX_AUDIT_DB", DATA_DIR / "audit.db"))
+
 STREAM_JPEG_QUALITY = 80
 STREAM_MAX_FPS = int(os.environ.get("ARGONYX_STREAM_MAX_FPS", "60"))

@@ -50,6 +50,8 @@ class WeaponDetector:
         return Path(self.model_path).exists()
 
     def _ensure_loaded(self):
+        from pathlib import Path
+
         if self._model is not None or self._load_attempted:
             return
         self._load_attempted = True
@@ -58,6 +60,9 @@ class WeaponDetector:
         from ultralytics import YOLO
 
         self._model = YOLO(str(self.model_path))
+        from backend.audit import audit, file_sha256
+
+        audit("MODEL_LOADED", f"weapon model: {Path(self.model_path).name} sha256 {file_sha256(self.model_path)}")
 
     def infer(self, frame) -> List[WeaponDetection]:
         self._ensure_loaded()
