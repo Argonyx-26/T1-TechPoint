@@ -217,25 +217,28 @@ two crowd clips) on an RTX 3050: old dashboard 7.9 -> 4.0 fps when opened,
 now 7.9 -> 7.8. If fps is still short, the analytics modules panel shows
 per-camera fps; search (CLIP) and pose are the optional costs.
 
-### Behaviour detection (pose): fighting, throwing, distress
+### Behaviour detection: fighting, throwing, distress
 
-yolov8n-pose runs per camera at up to 6 fps, only while people are in view.
-Every rule must hold over time (never one frame) and is worded "possible":
+Measured on real footage, not acted demos: `tools/eval_behaviour.py`
+replays 56 clips (~35 min: CAVIAR, UMN, UR Fall, plus our own clips; manifest
+`tools/behaviour_benchmark.json`) through the live detector + tracker + pose
++ rules on a simulated clock. Datasets go in `../behaviour_datasets/`.
 
-| Alert | Fires when | Band |
-|---|---|---|
-| Possible fight | two people close, at the same depth, fast arm strikes toward each other in >= 60% of pose frames over 2 s | HIGH |
-| Object thrown | a tracked bottle / phone / bag (or an unknown blob) leaves a fast-moving hand | MEDIUM, HIGH toward a person or a restricted zone |
-| Hands raised | both wrists above the nose for 2 s | HIGH; CRITICAL if a weapon was confirmed on that camera in the last 30 s |
-| Person down | horizontal for 3 s after being seen upright within 10 s (a fall, not a sleeper) | HIGH |
-| Possible panic | 3+ people suddenly running (2.5x their own speed) away from one point | HIGH, origin marked |
+| Alert | How it decides | Measured | Band |
+|---|---|---|---|
+| Possible fight | **learned**: CLIP embeddings of 2+ people in close contact, 2 s windows, logistic regression trained on the Surveillance Camera Fight Dataset (300 real CCTV clips) + 242 hard-negative windows of normal crowds (`tools/train_fight_classifier.py`); 2 windows in a row >= 0.6 | cross-validated on unseen source videos: AUC 0.86; held-out normal CCTV peaks at 0.31 (0 alerts); fires on the armed-robbery struggle in `cctv_knife.mp4` | HIGH |
+| Person down | horizontal body for 3 s where someone stood upright within 10 s (survives the track breaking mid-fall); people from conf 0.2 for this rule only | UR Fall side view 10/15 falls, 0/10 daily-activity clips | HIGH |
+| Possible panic | 3+ runners from one point, **or** a crowd of 5+ collapsing to half within 4 s while motion doubles | UMN: 8 alerts in its 11 scatter scenes, none elsewhere | HIGH |
+| Object thrown | a tracked bottle / phone / bag (or unknown blob) leaving a fast hand | UMN thrown-object clip: fires | MEDIUM, HIGH toward a person / restricted zone |
+| Hands raised | both wrists above the nose for 2 s | no public CCTV set; 1 false alert in the UMN crowd | HIGH, CRITICAL with a recent weapon |
 
-Body language only: no face or emotion analysis. Replayed over vtest,
-confusers, the gate/lobby simulations, the phone capture and the knife CCTV
-clip (about 6 minutes of footage) these raised no behaviour alerts. The
-**Analytics Modules** panel switches each module (pose, fighting, throwing,
-distress, search, re-ID, gap tracking) on or off live and shows per-camera
-fps; the switches are kept in `data/features.json` across restarts.
+31 of 32 normal clips raise nothing (the exception is a shop clerk dropping
+behind the counter during the robbery). **Known limits:** overhead / fisheye
+cameras (CAVIAR): the person detector barely sees people from above, so
+fights and falls there are missed (0/4, 0/3); falls where the person ends up
+hidden under furniture are missed (5 of the 15). Body language only: no face
+or emotion analysis. The **Analytics Modules** panel switches each module
+on or off live; the switches persist in `data/features.json`.
 
 ### Putting cameras on the map (accurately)
 

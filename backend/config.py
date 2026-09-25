@@ -214,6 +214,14 @@ DOWN_MIN_LENGTH = 0.6            # a lying body is about as long as it stood tal
 DOWN_NEAR_UPRIGHT = 1.0          # ...on this track, or anyone upright within this x their height of the spot
 PERSON_DOWN_S = 3.0
 FIGHT_WINDOW_S = 2.0
+# Learned fight classifier (backend/fight.py, tools/train_fight_classifier.py)
+FIGHT_CLF_MODEL = BASE_DIR / "models" / "fight_clf.npz"
+FIGHT_CLF_FPS = 4.0              # people-region CLIP embeddings per second, per camera with 2+ people
+FIGHT_CLF_WINDOW_S = 2.0         # scored over this window
+FIGHT_CLF_PAD = 0.2              # padding around the union of people boxes
+FIGHT_CLF_THRESHOLD = 0.6        # window probability that counts as fighting: held-out normal CCTV peaks at 0.31, a real armed-robbery struggle reaches 0.70-0.77
+FIGHT_CLF_PEOPLE_LOOKBACK_S = 5.0 # 1-2 boxes count as a pair if 2+ people were here this recently
+FIGHT_CLF_SUSTAIN = 2            # consecutive positive windows (0.5 s apart) before an alert
 FIGHT_MIN_RATIO = 0.6            # positive in >= 60% of pose frames over the window
 FIGHT_GAP_FRAC = 0.5             # box gap < 0.5 x person width
 FIGHT_DEPTH_FRAC = 0.25          # feet within this x person height of each other (same ground depth)

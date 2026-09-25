@@ -626,9 +626,15 @@ def iou(a, b) -> float:
 
 
 class BehaviourEngine:
-    def __init__(self, shared_lock: threading.Lock, alert_manager):
+    def __init__(self, shared_lock: threading.Lock, alert_manager, embedder=None):
+        from backend.fight import FightMonitor
+
         self._lock = shared_lock          # the GPU lock shared with detection
         self.alerts = alert_manager
+        # Learned fight detector (models/fight_clf.npz) on the search module's CLIP
+        # model; when present it replaces the pose fight rule, which cannot see
+        # real CCTV fights (see tools/train_fight_classifier.py).
+        self.fights = FightMonitor(embedder)
         self._model = None
         self.cameras: Dict[str, CameraBehaviour] = {}
         self._last_pose: Dict[str, float] = {}
@@ -641,12 +647,15 @@ class BehaviourEngine:
             audit("MODEL_LOADED", f"behaviour: {config.POSE_MODEL}")
 
     def on_frame(self, camera, frame, annotated):
-        if not features.enabled("pose"):
-            return
         state = self.cameras.setdefault(camera.id, CameraBehaviour())
         tracks = getattr(camera.pipeline, "last_tracks", {}) or {}
-        people_tracks = {tid: t for tid, t in tracks.items() if t.cls_name == "person" and tid >= 0}
         now = time.time()
+        if features.enabled("fighting") and self.fights.enabled:
+            self._learned_fight(camera, state, frame, annotated, tracks, now)
+        if not features.enabled("pose"):
+            self._draw(state, annotated, now)
+            return
+        people_tracks = {tid: t for tid, t in tracks.items() if t.cls_name == "person" and tid >= 0}
         if people_tracks and now - self._last_pose.get(camera.id, 0) >= 1.0 / config.POSE_FPS:
             self._last_pose[camera.id] = now
             people = self._pose(frame, people_tracks, now)
@@ -654,8 +663,10 @@ class BehaviourEngine:
             restricted = [z.to_pixels(w, h).polygon for z in camera.pipeline.zone_store.list() if z.restricted]
             gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                     if features.enabled("throwing") or features.enabled("distress") else None)
+            learned = self.fights.enabled
             events = state.update(now, people, tracks, (w, h), restricted, gray=gray,
-                                  weapon_recent=self._weapon_recent(camera.id, now), enabled=features.enabled)
+                                  weapon_recent=self._weapon_recent(camera.id, now),
+                                  enabled=lambda name: features.enabled(name) and not (learned and name == "fighting"))
             for event in events:
                 self.alerts.ingest_event(
                     event.rule, event.message, now, camera=camera, band=event.band, bbox=event.bbox,
@@ -663,6 +674,22 @@ class BehaviourEngine:
                     dedupe_key=(camera.id, event.rule, tuple(event.track_ids)),
                 )
         self._draw(state, annotated, now)
+
+    def _learned_fight(self, camera, state, frame, annotated, tracks, now):
+        boxes = [tuple(t.bbox) for t in tracks.values()
+                 if t.cls_name == "person" and t.conf >= config.DETECTOR_CONF_THRESHOLD]
+        hit = self.fights.update(camera.id, now, frame, boxes)
+        if hit is None or not state._once((FIGHT, "learned"), now):
+            return
+        p, box = hit
+        ids = [tid for tid, t in tracks.items() if t.cls_name == "person" and iou(t.bbox, box) > 0]
+        who = f"{len(ids)} people" if len(ids) >= 2 else "2 people seen as one"
+        event = BehaviourEvent(FIGHT, f"Possible fight ({who}, in close contact, model {p:.0%})",
+                               ids, box, label="POSSIBLE FIGHT")
+        state.overlays.append((now, event))
+        self.alerts.ingest_event(event.rule, event.message, now, camera=camera, band=event.band, bbox=event.bbox,
+                                 frame=annotated, track_ids=event.track_ids,
+                                 dedupe_key=(camera.id, event.rule, "learned"))
 
     def _pose(self, frame, people_tracks, now) -> Dict[int, PoseObs]:
         with self._lock:

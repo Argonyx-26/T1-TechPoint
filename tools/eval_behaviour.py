@@ -85,13 +85,20 @@ class _Alerts:
 CLOCK0 = 1_000_000.0
 
 
+_EMBEDDER = None
+
+
 def run_clip(shared, path: Path, fps_hint=None, hold_last_s=0.0, upscale_to=None):
+    global _EMBEDDER
+    if _EMBEDDER is None:
+        from backend.search import ClipEmbedder
+        _EMBEDDER = ClipEmbedder()
     clock = {"t": CLOCK0}
     behavior.time = types.SimpleNamespace(time=lambda: clock["t"])
     det = CameraObjectDetector(shared, int(PROC_FPS))
     tm = TrackManager()
     alerts = _Alerts()
-    engine = behavior.BehaviourEngine(shared._lock, alerts)
+    engine = behavior.BehaviourEngine(shared._lock, alerts, embedder=_EMBEDDER)
     cam = types.SimpleNamespace(id="bench", pipeline=types.SimpleNamespace(
         last_tracks={}, zone_store=types.SimpleNamespace(list=lambda: [])))
     next_t, n, seconds = 0.0, 0, 0.0
