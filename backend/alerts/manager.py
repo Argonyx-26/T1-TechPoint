@@ -50,10 +50,11 @@ class AlertManager:
     def raise_alert(self, rule: str, description: str, zone: str | None = None,
                     track_id: int | None = None, key=None, evidence: bytes | None = None,
                     now: float | None = None) -> Alert | None:
-        """Record an alert unless the same (rule, zone/track) fired within the cooldown.
+        """Record an alert unless the same (rule, key) fired within the cooldown.
 
-        `key` overrides the zone/track part of the cooldown key (e.g. the weapon class).
-        Returns the new Alert, or None if suppressed.
+        `key` is the zone id for zone rules and the weapon class for weapons; without it
+        the key falls back to (zone, track). Rules never share a key, so a busy zone
+        can never suppress a weapon alert. Returns the new Alert, or None if suppressed.
         """
         if rule not in config.ALERT_RULES:
             raise ValueError(f"unknown rule {rule}")

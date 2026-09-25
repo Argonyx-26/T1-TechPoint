@@ -3273,7 +3273,14 @@ document
 
 document
     .getElementById("clearAlerts")
-    .addEventListener("click", () => {
+    .addEventListener("click", async () => {
+
+        // Clear on the backend too, or the next poll brings them all back
+        try {
+            await api("/alerts", { method: "DELETE" });
+        } catch (error) {
+            console.warn(error);
+        }
 
         alerts = [];
 

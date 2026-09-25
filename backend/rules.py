@@ -70,7 +70,11 @@ class RuleEvent:
     description: str
     zone: str | None = None      # zone name, for display
     track_id: int | None = None
-    key: tuple | None = None     # cooldown key (zone id, track id)
+    key: str | None = None       # cooldown key: the zone id, so a busy zone raises one alert
+
+
+def _people(n: int) -> str:
+    return f"{n} person" if n == 1 else f"{n} people"
 
 
 class RulesEngine:
@@ -95,9 +99,12 @@ class RulesEngine:
         events: list[RuleEvent] = []
         intruding_now, crowded_now = set(), set()
 
+        # Per-track state still decides *whether* something new happened, but each
+        # zone emits at most one event per rule per frame, keyed by zone id
         for zone in zones:
             poly = zone.pixel_polygon(w, h)
             inside = [t for t in people if point_in_polygon(t.foot_point, poly)]
+            new_intruders, new_loiterers = [], []
             for t in inside:
                 key = (zone.id, t.track_id)
                 self._last_inside[key] = now
@@ -106,19 +113,28 @@ class RulesEngine:
                 if zone.restricted:
                     intruding_now.add(key)
                     if key not in self._intruding:
-                        events.append(RuleEvent(
-                            "restricted_intrusion",
-                            f"Person #{t.track_id} entered restricted zone '{zone.name}'",
-                            zone.name, t.track_id, key))
+                        new_intruders.append(t)
 
-                dwell = now - entered
-                if dwell >= loiter_limit and key not in self._loiter_fired:
+                if now - entered >= loiter_limit and key not in self._loiter_fired:
                     self._loiter_fired.add(key)
-                    events.append(RuleEvent(
-                        "loitering",
-                        f"Person #{t.track_id} has stayed in zone '{zone.name}' for "
-                        f"{dwell:.0f}s (limit {loiter_limit:g}s)",
-                        zone.name, t.track_id, key))
+                    new_loiterers.append(t)
+
+            if new_intruders:
+                latest = max(t.track_id for t in new_intruders)
+                events.append(RuleEvent(
+                    "restricted_intrusion",
+                    f"{_people(len(inside))} in restricted zone '{zone.name}' (latest #{latest})",
+                    zone.name, latest, zone.id))
+
+            if new_loiterers:
+                latest = max(t.track_id for t in new_loiterers)
+                loitering = sum(1 for t in inside
+                                if now - self._entered[(zone.id, t.track_id)] >= loiter_limit)
+                events.append(RuleEvent(
+                    "loitering",
+                    f"{_people(loitering)} loitering in zone '{zone.name}' over "
+                    f"{loiter_limit:g}s (latest #{latest})",
+                    zone.name, latest, zone.id))
 
             if len(inside) >= crowd_limit:
                 crowded_now.add(zone.id)
@@ -126,7 +142,7 @@ class RulesEngine:
                     events.append(RuleEvent(
                         "crowd_surge",
                         f"{len(inside)} people in zone '{zone.name}' (threshold {crowd_limit})",
-                        zone.name, None, (zone.id, None)))
+                        zone.name, None, zone.id))
 
         # With no zones drawn, crowd surge still watches the whole frame
         if not zones and len(people) >= crowd_limit:
@@ -134,7 +150,7 @@ class RulesEngine:
             if None not in self._crowded:
                 events.append(RuleEvent(
                     "crowd_surge", f"{len(people)} people in view (threshold {crowd_limit})",
-                    None, None, (None, None)))
+                    None, None, "__frame__"))
 
         self._intruding = intruding_now
         self._crowded = crowded_now

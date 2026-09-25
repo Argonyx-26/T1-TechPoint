@@ -45,6 +45,18 @@ def test_restricted_intrusion_fires_once_per_entry():
     assert rules_of(e.evaluate([inside], [zone], FRAME, now=3)) == ["restricted_intrusion"]
 
 
+def test_intrusion_is_one_event_per_zone_with_count():
+    e = engine()
+    zone = Zone("z1", "Walkway", MIDDLE, restricted=True)
+    a, b, c = (FakeTrack(i, (400 + i, 500)) for i in (135, 136, 137))
+    ev = e.evaluate([a, b], [zone], FRAME, now=0)
+    assert rules_of(ev) == ["restricted_intrusion"] and ev[0].key == "z1"
+    assert ev[0].description == "2 people in restricted zone 'Walkway' (latest #136)"
+    ev = e.evaluate([a, b, c], [zone], FRAME, now=1)
+    assert ev[0].description == "3 people in restricted zone 'Walkway' (latest #137)"
+    assert ev[0].key == "z1" and ev[0].track_id == 137
+
+
 def test_uses_bottom_center_point_not_box_center():
     e = engine()
     zone = Zone("z1", "Vault", MIDDLE, restricted=True)
@@ -60,6 +72,7 @@ def test_loitering_after_threshold_only():
     assert e.evaluate([p], [zone], FRAME, now=9) == []
     ev = e.evaluate([p], [zone], FRAME, now=10)
     assert rules_of(ev) == ["loitering"] and ev[0].track_id == 4 and ev[0].zone == "Lobby"
+    assert ev[0].key == "z1"
     assert e.evaluate([p], [zone], FRAME, now=11) == []  # once per visit
 
 

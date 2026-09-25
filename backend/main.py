@@ -188,6 +188,12 @@ def alerts(limit: int = Query(50, ge=1, le=config.ALERT_MAX)):
     return pipeline.alerts.list(limit)
 
 
+@app.delete("/api/alerts")
+def clear_alerts():
+    pipeline.alerts.clear()
+    return {"ok": True, "alert_count": 0}
+
+
 @app.get("/api/alerts/{alert_id}/evidence")
 def alert_evidence(alert_id: str):
     # str, not int: the dashboard's simulated alerts use ids like "demo-123" -> 404, not 400

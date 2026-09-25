@@ -19,6 +19,7 @@ disagree, the frontend wins and this file gets updated.
 | POST | `/api/source/upload` | Upload button |
 | POST | `/api/source/stop` | not yet |
 | GET | `/api/alerts?limit=50` | alert sidebar, polled every 3 s |
+| DELETE | `/api/alerts` | Clear Alerts button |
 | GET | `/api/alerts/{id}/evidence` | evidence modal image |
 | GET / POST | `/api/zones` | zone list / save / clear |
 | GET / POST | `/api/thresholds` | thresholds panel |
@@ -137,8 +138,9 @@ No body. Response: `/api/status` JSON with `"running": false, "source": null`.
 ## GET /api/alerts?limit=50
 
 `limit` 1-200 (default 50). Sorted by severity (critical, high, medium, low), then newest first.
-At most 200 alerts are kept. The same rule for the same zone/track (or weapon class) cannot
-re-fire within 12 s.
+At most 200 alerts are kept. Zone rules (intrusion, loitering, crowd) are rate-limited per
+(rule, zone): at most one alert per zone every 12 s however many people walk in. Weapon alerts
+have their own per-class 12 s cooldown and are never suppressed by other alert types.
 
 ```json
 [
@@ -147,8 +149,8 @@ re-fire within 12 s.
     "type": "Restricted Zone Intrusion",
     "rule": "restricted_intrusion",
     "severity": "high",
-    "description": "Person #137 entered restricted zone 'Walkway'",
-    "message": "Person #137 entered restricted zone 'Walkway'",
+    "description": "3 people in restricted zone 'Walkway' (latest #137)",
+    "message": "3 people in restricted zone 'Walkway' (latest #137)",
     "timestamp": "14:10:03",
     "created_at": "2026-09-25T14:10:03+05:30",
     "zone": "Walkway",
@@ -167,7 +169,11 @@ re-fire within 12 s.
 | `loitering` | Loitering | low | a person stays in a zone >= `loiter_seconds` |
 
 - `timestamp` is local `HH:MM:SS` (the dashboard shows it as-is); `created_at` is ISO 8601.
-- `zone` is the zone name or `null`; `track_id` is `null` for weapon and crowd alerts.
+- `zone` is the zone name or `null`; `track_id` is the latest person to trigger it, `null` for weapon and crowd alerts.
+
+## DELETE /api/alerts
+
+Clears every alert (and resets cooldowns). Response: `{"ok": true, "alert_count": 0}`.
 
 ## GET /api/alerts/{id}/evidence
 

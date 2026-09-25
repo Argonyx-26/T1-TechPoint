@@ -147,6 +147,32 @@ def test_alerts_shape_sort_and_evidence(client):
     mgr.clear()
 
 
+def test_zone_cooldown_does_not_suppress_weapon(client):
+    mgr = client.pipeline.alerts
+    mgr.clear()
+    now = time.time()
+    assert mgr.raise_alert("restricted_intrusion", "1 person", zone="Door", track_id=1, key="z1", now=now)
+    # another person in the same zone inside the cooldown: suppressed
+    assert mgr.raise_alert("restricted_intrusion", "2 people", zone="Door", track_id=2, key="z1",
+                           now=now + 1) is None
+    assert mgr.raise_alert("restricted_intrusion", "1 person", zone="Gate", track_id=3, key="z2",
+                           now=now + 1)
+    assert mgr.raise_alert("weapon", "Knife detected", key="knife", now=now + 1)
+    assert mgr.raise_alert("restricted_intrusion", "2 people", zone="Door", track_id=4, key="z1",
+                           now=now + 13)
+    mgr.clear()
+
+
+def test_delete_alerts(client):
+    mgr = client.pipeline.alerts
+    mgr.raise_alert("weapon", "Knife detected", key="knife")
+    assert client.get("/api/status").json()["alert_count"] >= 1
+    r = client.delete("/api/alerts")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert client.get("/api/alerts").json() == []
+    assert client.get("/api/status").json()["alert_count"] == 0
+
+
 @pytest.mark.parametrize("alert_id", ["999999", "demo-1727000000000"])
 def test_evidence_404(client, alert_id):
     r = client.get(f"/api/alerts/{alert_id}/evidence")
