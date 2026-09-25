@@ -35,9 +35,12 @@ class FramePipeline:
         weapon_detector: WeaponDetector = None,
         zone_store: ZoneStore = None,
         alert_manager: AlertManager = None,
+        lazy: bool = False,
     ):
-        self.object_detector = object_detector or ObjectDetector()
-        self.weapon_detector = weapon_detector or WeaponDetector()
+        # lazy=True: the caller (a Camera) plugs in its own detectors on start.
+        self.object_detector = object_detector if lazy else (object_detector or ObjectDetector())
+        self.weapon_detector = weapon_detector if lazy else (weapon_detector or WeaponDetector())
+        self.camera = None  # set by backend.cameras.Camera; gives alerts their place
         self.zone_store = zone_store or ZoneStore()
         self.alert_manager = alert_manager or AlertManager()
         self.rule_engine = RuleEngine()
@@ -64,6 +67,10 @@ class FramePipeline:
         # can actually raise a CRITICAL alert must additionally clear the
         # stricter WEAPON_ALERT_MIN_CONF bar below.
         weapon_detections = self.weapon_detector.infer(frame)
+        # None = the weapon model was skipped on this frame (WEAPON_EVERY_N_FRAMES):
+        # the 5-of-8 filter then stays untouched, it counts weapon evaluations.
+        weapon_evaluated = weapon_detections is not None
+        weapon_detections = weapon_detections or []
         alert_eligible = [wd for wd in weapon_detections if wd.conf >= config.WEAPON_ALERT_MIN_CONF]
 
         # Only a *sustained* weapon detection (seen in most of the last few
@@ -73,7 +80,7 @@ class FramePipeline:
         # the overlay can gate on the same bar as a real alert, not a
         # single-frame threshold touch.
         latest_by_class = {wd.cls_name: wd for wd in alert_eligible}
-        confirmed_classes = set(self.weapon_filter.update(set(latest_by_class)))
+        confirmed_classes = set(self.weapon_filter.update(set(latest_by_class))) if weapon_evaluated else set()
 
         display_weapons = self._smooth_weapon_display(weapon_detections, confirmed_classes, timestamp)
 
@@ -84,14 +91,14 @@ class FramePipeline:
         self._update_object_counts(tracks, alert_eligible)
 
         if rule_alerts:
-            self.alert_manager.ingest_rule_alerts(rule_alerts, frame=annotated)
+            self.alert_manager.ingest_rule_alerts(rule_alerts, frame=annotated, camera=self.camera)
 
         for cls_name in confirmed_classes:
             wd = latest_by_class.get(cls_name)
             if wd is None:
                 continue
             self.alert_manager.ingest_weapon_alert(
-                wd.cls_name, wd.conf, wd.bbox, timestamp, frame=annotated
+                wd.cls_name, wd.conf, wd.bbox, timestamp, frame=annotated, camera=self.camera
             )
 
         return annotated

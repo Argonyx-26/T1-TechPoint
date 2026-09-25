@@ -110,5 +110,16 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 AUDIT_ENABLED = True
 AUDIT_DB = Path(os.environ.get("ARGONYX_AUDIT_DB", DATA_DIR / "audit.db"))
 
+# --- Multi-camera ---------------------------------------------------------
+MAX_CAMERAS = 4
+CAMERA_MAX_FPS = 12            # processing rate per camera (capture keeps only the latest frame)
+PROCESS_WIDTH = 640            # frames are downscaled to this width before analysis
+WEAPON_EVERY_N_FRAMES = 1      # run the weapon model on every Nth processed frame per camera
+RECONNECT_INITIAL_S = 3.0      # first retry after a stream drops...
+RECONNECT_MAX_S = 30.0         # ...doubling up to this
+OFFLINE_AFTER_S = 30.0         # "reconnecting" becomes "offline since HH:MM" after this long
+CAMERAS_FILE = DATA_DIR / "cameras.json"
+SOURCE_CONNECT_TIMEOUT_S = 5.0  # single-source flow: wait this long for a first frame before reporting failure
+
 STREAM_JPEG_QUALITY = 80
 STREAM_MAX_FPS = int(os.environ.get("ARGONYX_STREAM_MAX_FPS", "60"))

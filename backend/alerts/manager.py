@@ -37,6 +37,10 @@ class Alert:
     evidence_path: Optional[str] = None
     acknowledged_by: Optional[str] = None
     acknowledged_at: Optional[float] = None
+    camera_id: Optional[str] = None
+    camera_name: Optional[str] = None
+    camera_code: Optional[str] = None
+    location: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
@@ -59,6 +63,10 @@ class Alert:
             "acknowledged": self.acknowledged_at is not None,
             "acknowledged_by": self.acknowledged_by,
             "acknowledged_at": self.acknowledged_at,
+            "camera_id": self.camera_id,
+            "camera_name": self.camera_name,
+            "camera_code": self.camera_code,
+            "location": self.location,
         }
 
 
@@ -76,33 +84,52 @@ class AlertManager:
         last = self._last_fired.get(key)
         return last is not None and (timestamp - last) < config.ALERT_COOLDOWN_SECONDS
 
-    def _co_occurring_rules(self, zone_id, timestamp: float) -> List[str]:
+    def _co_occurring_rules(self, zone_id, timestamp: float, camera_id=None) -> List[str]:
         if zone_id is None:
             return []
         window_start = timestamp - config.CO_OCCURRENCE_WINDOW_SECONDS
         with self._lock:
             return [
-                a.rule for a in self._alerts if a.zone_id == zone_id and a.timestamp >= window_start
+                a.rule for a in self._alerts
+                if a.zone_id == zone_id and a.camera_id == camera_id and a.timestamp >= window_start
             ]
 
-    def ingest_rule_alerts(self, rule_alerts: List[RuleAlert], frame=None) -> List[Alert]:
+    @staticmethod
+    def _camera_fields(camera) -> dict:
+        if camera is None:
+            return {}
+        return {
+            "camera_id": camera.id,
+            "camera_name": camera.name,
+            "camera_code": camera.code,
+            "location": camera.location.to_dict(),
+        }
+
+    @staticmethod
+    def _placed(message: str, camera) -> str:
+        """"Main Gate (CAM-02): Weapon detected - knife 81%"."""
+        return f"{camera.place} ({camera.code}): {message}" if camera is not None else message
+
+    def ingest_rule_alerts(self, rule_alerts: List[RuleAlert], frame=None, camera=None) -> List[Alert]:
         created = []
+        cam_id = camera.id if camera is not None else None
         for ra in rule_alerts:
+            # Cooldowns are per camera: the same rule on another camera is a new event.
             if ra.rule in ZONE_KEYED_RULES:
-                key = (ra.rule, ra.zone_id)
+                key = (cam_id, ra.rule, ra.zone_id)
             else:
-                key = (ra.rule, ra.zone_id, tuple(sorted(ra.track_ids)))
+                key = (cam_id, ra.rule, ra.zone_id, tuple(sorted(ra.track_ids)))
             if self._on_cooldown(key, ra.timestamp):
                 continue
             self._last_fired[key] = ra.timestamp
 
-            siblings = self._co_occurring_rules(ra.zone_id, ra.timestamp)
+            siblings = self._co_occurring_rules(ra.zone_id, ra.timestamp, cam_id)
             score, band = severity.score_alert(ra.rule, siblings)
 
             alert = Alert(
                 id=next(_id_counter),
                 rule=ra.rule,
-                message=ra.message,
+                message=self._placed(ra.message, camera),
                 score=score,
                 band=band,
                 timestamp=ra.timestamp,
@@ -110,17 +137,19 @@ class AlertManager:
                 zone_id=ra.zone_id,
                 zone_name=ra.zone_name,
                 bbox=ra.bbox,
+                **self._camera_fields(camera),
             )
             self._save_evidence(alert, frame)
             self._store(alert)
             created.append(alert)
         return created
 
-    def ingest_weapon_alert(self, cls_name: str, conf: float, bbox, timestamp: float, frame=None) -> Optional[Alert]:
+    def ingest_weapon_alert(self, cls_name: str, conf: float, bbox, timestamp: float, frame=None,
+                            camera=None) -> Optional[Alert]:
         # Weapon detections have no stable track id (single-shot detector), so
-        # dedupe/cooldown on class name instead of a sustained detection
-        # spamming one alert per frame.
-        key = (WEAPON_RULE, cls_name)
+        # dedupe/cooldown on camera + class name instead of a sustained
+        # detection spamming one alert per frame.
+        key = (camera.id if camera is not None else None, WEAPON_RULE, cls_name)
         if self._on_cooldown(key, timestamp):
             return None
         self._last_fired[key] = timestamp
@@ -129,12 +158,13 @@ class AlertManager:
         alert = Alert(
             id=next(_id_counter),
             rule=WEAPON_RULE,
-            message=f"Weapon detected: {cls_name} ({conf:.0%} confidence)",
+            message=self._placed(f"Weapon detected - {cls_name} {conf:.0%}", camera),
             score=score,
             band=band,
             timestamp=timestamp,
             track_ids=[],
             bbox=bbox,
+            **self._camera_fields(camera),
         )
         self._save_evidence(alert, frame)
         self._store(alert)
@@ -158,7 +188,8 @@ class AlertManager:
             self._total_count += 1
             if len(self._alerts) > self._max_alerts:
                 self._alerts = self._alerts[-self._max_alerts :]
-        audit("ALERT_FIRED", f"{alert.band} {alert.rule}: {alert.message}", alert_id=alert.id)
+        audit("ALERT_FIRED", f"{alert.band} {alert.rule}: {alert.message}", alert_id=alert.id,
+              camera_id=alert.camera_id)
 
     def acknowledge(self, alert_id: int, who: str = "operator") -> Optional[Alert]:
         with self._lock:
@@ -187,10 +218,13 @@ class AlertManager:
             self._alerts = []
             return removed
 
-    def active_count(self) -> int:
-        """Alerts currently in the feed (cleared ones excluded)."""
+    def active_count(self, camera_id: Optional[str] = None) -> int:
+        """Unacknowledged alerts currently in the feed, optionally for one camera."""
         with self._lock:
-            return len(self._alerts)
+            return sum(
+                1 for a in self._alerts
+                if a.acknowledged_at is None and (camera_id is None or a.camera_id == camera_id)
+            )
 
     def total_count(self) -> int:
         with self._lock:

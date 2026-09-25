@@ -1,125 +1,94 @@
-"""Owns the single background video-processing loop and the shared state the
-FastAPI endpoints read from (latest annotated frame, fps, current source).
+"""Shared state the FastAPI endpoints read from.
+
+The system is multi-camera (backend/cameras.py). The original single-source
+API keeps working by mapping onto camera 1 ("cam-1"): /video_feed,
+/api/source/*, /api/zones and /api/status all act on it.
 """
-import threading
 import time
 from typing import Optional, Union
 
-import cv2
-
 from backend import config
-from backend.audit import audit
-from backend.pipeline import FramePipeline
-from backend.video_source import VideoSource
+from backend.analytics.rules import RuleEngine
+from backend.cameras import STATUS_ONLINE, Camera, CameraManager
+
+PRIMARY_ID = "cam-1"
 
 
 class AppState:
     def __init__(self):
-        self.pipeline = FramePipeline()
-        self.video_source: Optional[VideoSource] = None
-        self._lock = threading.Lock()
-        self._latest_jpeg: Optional[bytes] = None
-        self._frame_shape = (0, 0)
-        self._fps = 0.0
-        self._capture_ms = 0.0    # time spent reading a frame from the source
-        self._inference_ms = 0.0  # time spent in the detection/rules pipeline
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._source_label = "none"
+        # Restores saved cameras in STOPPED state: the server always starts idle.
+        self.manager = CameraManager()
         self._start_time = time.time()
 
-    def start(self, source: Union[int, str], label: str):
-        self.stop()
-        self.video_source = VideoSource(source)
-        self._source_label = label
-        self._running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
+    @property
+    def alert_manager(self):
+        return self.manager.alert_manager
+
+    def primary(self) -> Optional[Camera]:
+        return self.manager.get(PRIMARY_ID)
+
+    def switch_source(self, source: Union[int, str], label: str = "") -> Camera:
+        """Single-source flow: (re)point camera 1 at a new source and start it."""
+        if self.primary() is None:
+            return self.manager.add("CAM-01", source, cam_id=PRIMARY_ID)
+        return self.manager.set_source(PRIMARY_ID, source)
 
     def stop(self):
-        self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-            self._thread = None
-        if self.video_source is not None:
-            self.video_source.release()
-            self.video_source = None
+        self.manager.stop_all()
 
-    def switch_source(self, source: Union[int, str], label: str):
-        self.start(source, label)
-        audit("SOURCE_CHANGED", label, actor="operator")
+    def frame_size(self, cam_id: str = PRIMARY_ID):
+        camera = self.manager.get(cam_id)
+        return camera.frame_size() if camera else (0, 0)
 
-    def _loop(self):
-        last_ts = time.time()
-        min_frame_time = 1.0 / config.STREAM_MAX_FPS
-        while self._running:
-            t_read_start = time.time()
-            ok, frame = self.video_source.read()
-            capture_ms = (time.time() - t_read_start) * 1000.0
-            if not ok or frame is None:
-                time.sleep(0.05)
-                continue
+    def latest_jpeg(self, cam_id: str = PRIMARY_ID) -> Optional[bytes]:
+        camera = self.manager.get(cam_id)
+        return camera.latest_jpeg() if camera else None
 
-            t_infer_start = time.time()
-            try:
-                annotated = self.pipeline.process(frame)
-            except Exception as exc:  # keep the stream alive if one frame errors
-                annotated = frame
-                print(f"[pipeline] frame error: {exc}")
-            inference_ms = (time.time() - t_infer_start) * 1000.0
-
-            ok_enc, buf = cv2.imencode(
-                ".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), config.STREAM_JPEG_QUALITY]
-            )
-            if ok_enc:
-                with self._lock:
-                    self._latest_jpeg = buf.tobytes()
-                    self._frame_shape = annotated.shape[:2]
-
-            with self._lock:
-                self._capture_ms = 0.9 * self._capture_ms + 0.1 * capture_ms
-                self._inference_ms = 0.9 * self._inference_ms + 0.1 * inference_ms
-
-            now = time.time()
-            dt = now - last_ts
-            last_ts = now
-            if dt > 0:
-                self._fps = 0.9 * self._fps + 0.1 * (1.0 / dt)
-            if dt < min_frame_time:
-                time.sleep(min_frame_time - dt)
-
-    def frame_size(self):
-        """(width, height) of the current source's frames, (0, 0) if none yet."""
-        with self._lock:
-            h, w = self._frame_shape
-        return w, h
-
-    def latest_jpeg(self) -> Optional[bytes]:
-        with self._lock:
-            return self._latest_jpeg
+    def thresholds(self) -> dict:
+        camera = self.primary() or next(iter(self.manager.cameras.values()), None)
+        engine = camera.pipeline.rule_engine if camera else RuleEngine()
+        if camera is None and self.manager.thresholds:
+            engine.update_thresholds(**self.manager.thresholds)
+        return {
+            "loiter_seconds": engine.loiter_seconds,
+            "crowd_threshold": engine.crowd_threshold,
+            "unattended_seconds": engine.unattended_seconds,
+            "unattended_radius_px": engine.unattended_radius_px,
+            "stationary_speed_px_s": engine.stationary_speed_px_s,
+            "wrong_direction_angle_deg": engine.wrong_direction_angle_deg,
+            "surge_min_increase": engine.surge_min_increase,
+            "surge_window_s": engine.surge_window_s,
+            "surge_avg_multiplier": engine.surge_avg_multiplier,
+            "surge_min_people": engine.surge_min_people,
+        }
 
     def status(self) -> dict:
-        with self._lock:
-            h, w = self._frame_shape
-            capture_ms = round(self._capture_ms, 1)
-            inference_ms = round(self._inference_ms, 1)
+        camera = self.primary()
+        cam = camera.to_dict() if camera else {}
+        cameras = self.manager.list()
+        online = [c for c in cameras if c.status == STATUS_ONLINE]
+        counts = cam.get("object_counts", {})
         return {
-            "running": self._running,
-            "source": self._source_label,
-            "fps": round(self._fps, 1),
-            "frame_width": w,
-            "frame_height": h,
-            "weapon_detector_enabled": self.pipeline.weapon_detector.enabled,
+            "running": bool(camera and camera.status == STATUS_ONLINE),
+            "source": cam.get("source_label", "none") if camera else "none",
+            "camera_status": cam.get("status", "none"),
+            "fps": cam.get("fps", 0.0),
+            "frame_width": cam.get("frame_width", 0),
+            "frame_height": cam.get("frame_height", 0),
+            "weapon_detector_enabled": self.manager.shared.weapon.enabled,
             "device": config.DEVICE,
-            "objects": dict(self.pipeline.last_object_counts),
-            "object_counts": dict(self.pipeline.last_object_counts),
-            "object_count": sum(self.pipeline.last_object_counts.values()),
-            "alert_count": self.pipeline.alert_manager.active_count(),
-            "zone_counts": dict(self.pipeline.rule_engine.zone_counts),
-            "capture_ms": capture_ms,
-            "inference_ms": inference_ms,
+            "objects": counts,
+            "object_counts": counts,
+            "object_count": sum(counts.values()),
+            "alert_count": self.alert_manager.active_count(),
+            "zone_counts": dict(camera.pipeline.rule_engine.zone_counts) if camera else {},
+            "inference_ms": cam.get("inference_ms", 0.0),
+            "capture_ms": 0.0,
             "uptime_seconds": round(time.time() - self._start_time),
-            "total_alerts": self.pipeline.alert_manager.total_count(),
+            "total_alerts": self.alert_manager.total_count(),
+            "cameras_online": len(online),
+            "cameras_total": len(cameras),
+            "total_objects": sum(c.to_dict()["object_count"] for c in online),
         }
 
 
