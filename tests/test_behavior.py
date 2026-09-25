@@ -255,3 +255,16 @@ def test_people_at_different_depths_overlapping_on_screen_are_not_fighting():
         return PoseObs(ts, k, (330 - 0.2 * 144, 40, 330 + 0.2 * 144, 40 + 144))
     frames = [{4: near_person, 7: far_person}] * 16
     assert not [e for e in run(CameraBehaviour(), frames) if e.rule == FIGHT]
+
+
+def test_module_switches_persist(tmp_path, monkeypatch):
+    from backend import config, features
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(features, "_features", dict(config.FEATURE_DEFAULTS))
+    features.set_features(search=False, bogus=True)
+    monkeypatch.setattr(features, "_features", dict(config.FEATURE_DEFAULTS))   # "restart"
+    features.load()
+    assert features.enabled("search") is False
+    assert features.enabled("pose") is True
+    assert "bogus" not in features.all_features()

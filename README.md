@@ -217,6 +217,26 @@ two crowd clips) on an RTX 3050: old dashboard 7.9 -> 4.0 fps when opened,
 now 7.9 -> 7.8. If fps is still short, the analytics modules panel shows
 per-camera fps; search (CLIP) and pose are the optional costs.
 
+### Behaviour detection (pose): fighting, throwing, distress
+
+yolov8n-pose runs per camera at up to 6 fps, only while people are in view.
+Every rule must hold over time (never one frame) and is worded "possible":
+
+| Alert | Fires when | Band |
+|---|---|---|
+| Possible fight | two people close, at the same depth, fast arm strikes toward each other in >= 60% of pose frames over 2 s | HIGH |
+| Object thrown | a tracked bottle / phone / bag (or an unknown blob) leaves a fast-moving hand | MEDIUM, HIGH toward a person or a restricted zone |
+| Hands raised | both wrists above the nose for 2 s | HIGH; CRITICAL if a weapon was confirmed on that camera in the last 30 s |
+| Person down | horizontal for 3 s after being seen upright within 10 s (a fall, not a sleeper) | HIGH |
+| Possible panic | 3+ people suddenly running (2.5x their own speed) away from one point | HIGH, origin marked |
+
+Body language only: no face or emotion analysis. Replayed over vtest,
+confusers, the gate/lobby simulations, the phone capture and the knife CCTV
+clip (about 6 minutes of footage) these raised no behaviour alerts. The
+**Analytics Modules** panel switches each module (pose, fighting, throwing,
+distress, search, re-ID, gap tracking) on or off live and shows per-camera
+fps; the switches are kept in `data/features.json` across restarts.
+
 ### Putting cameras on the map (accurately)
 
 A laptop's "Use my location" over a phone hotspot is IP / Wi-Fi based and can
