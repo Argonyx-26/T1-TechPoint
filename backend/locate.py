@@ -61,7 +61,7 @@ def locate_post(code: str, fix: GpsFix):
     app_state.manager.update(cam.id, location={"lat": lat, "lng": lng, "accuracy_m": acc, "source": source})
     message = (f"Located via phone GPS {geo.describe_accuracy(acc)}" if acc is not None
                else "Placed from pasted coordinates")
-    audit("CAMERA_LOCATED", f"{cam.code} {cam.name}: {message} ({lat:.6f}, {lng:.6f})", actor="phone", camera_id=cam.id)
+    audit("CAMERA_LOCATED", f"{cam.title}: {message} ({lat:.6f}, {lng:.6f})", actor="phone", camera_id=cam.id)
     return {"ok": True, "camera": cam.code, "lat": lat, "lng": lng, "accuracy_m": acc, "message": message}
 
 

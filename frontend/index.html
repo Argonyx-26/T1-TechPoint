@@ -2839,8 +2839,8 @@ function updateFocusedUI() {
     const cam = focusedCamera();
     const live = Boolean(cam && cam.status === "online" && cam.frame_width);
 
-    document.getElementById("focusCode").textContent = cam ? `${cam.code} ${cam.name}` : "NO CAMERA";
-    activeSource.textContent = cam ? `${cam.code} ${cam.name}`.toUpperCase() : "NONE";
+    document.getElementById("focusCode").textContent = cam ? camTitle(cam) : "NO CAMERA";
+    activeSource.textContent = cam ? camTitle(cam).toUpperCase() : "NONE";
     currentSource = cam ? cam.source_label : null;
     document.getElementById("feedSource").textContent =
         cam ? `SOURCE: ${String(cam.source_label).toUpperCase()} | ${cam.location?.label || ""}` : "SOURCE: NONE";
@@ -3518,7 +3518,7 @@ function buildCameraTile(cam) {
     tile.querySelector(".camera-pin").addEventListener("click", () => openLocationEditor(cam.id));
     tile.querySelector(".camera-gps").addEventListener("click", () => openLocateQR(cam.id));
     tile.querySelector(".camera-remove").addEventListener("click", async () => {
-        if (!confirm(`Remove ${cam.code} ${cam.name}?`)) return;
+        if (!confirm(`Remove ${camTitle(cam)}?`)) return;
         try {
             await api(`/cameras/${cam.id}`, { method: "DELETE" });
             showToast(`${cam.code} removed`);
@@ -3560,7 +3560,7 @@ function buildCameraTile(cam) {
 
 function updateCameraTile(tile, cam) {
     const state = camStatusLabel(cam);
-    tile.querySelector(".cam-code").textContent = `${cam.code} ${cam.name}`;
+    tile.querySelector(".cam-code").textContent = camTitle(cam);
     tile.querySelector(".cam-source").textContent = cam.source_label || "";
     const live = tile.querySelector(".cam-state");
     live.className = `camera-live cam-state ${state.cls}`;
@@ -3853,7 +3853,7 @@ document.getElementById("camSaveBtn").addEventListener("click", async () => {
         addCameraModal.classList.remove("show");
         document.getElementById("discoverList").innerHTML = "";
         ["camName", "camLocation", "camIp", "camUrl"].forEach(id => document.getElementById(id).value = "");
-        showToast(`${cam.code} ${cam.name} added`);
+        showToast(`${camTitle(cam)} added`);
         loadCameras();
     } catch (error) {
         showToast(error.message);
@@ -3903,6 +3903,13 @@ function markerColor(cam) {
 function navigateUrl(loc) {
     return loc && loc.lat != null && loc.lng != null
         ? `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}` : null;
+}
+
+// "CAM-01" when the camera has no name of its own, else "CAM-02 Main Gate".
+function camTitle(cam) {
+    if (!cam) return "";
+    const name = (cam.name || "").trim();
+    return !name || name.toUpperCase() === cam.code ? cam.code : `${cam.code} ${name}`;
 }
 
 function fmtAccuracy(m) {
@@ -4022,7 +4029,7 @@ function popupHTML(cam) {
     const latest = cam.latest_alert;
     const counts = Object.entries(cam.object_counts || {}).map(([k, v]) => `${v} ${k}`).join(", ") || "no objects";
     return `<div class="map-popup">
-        <div class="pop-title">${escapeHTML(cam.code)} ${escapeHTML(cam.name)}</div>
+        <div class="pop-title">${escapeHTML(camTitle(cam))}</div>
         <div class="pop-meta">${escapeHTML(loc.label || "")} &middot; ${escapeHTML(camStatusLabel(cam).text)}</div>
         <img src="/api/cameras/${encodeURIComponent(cam.id)}/snapshot?t=${Date.now()}" alt="live thumbnail" onerror="this.style.visibility='hidden'">
         <div class="pop-meta">${escapeHTML(counts)}</div>
@@ -4383,7 +4390,7 @@ function streetMapOffline() {
 function renderMap() {
     const select = document.getElementById("mapCameraSelect");
     const current = select.value;
-    select.innerHTML = cameras.map(c => `<option value="${c.id}">${escapeHTML(c.code)} ${escapeHTML(c.name)}</option>`).join("");
+    select.innerHTML = cameras.map(c => `<option value="${c.id}">${escapeHTML(camTitle(c))}</option>`).join("");
     if (cameras.some(c => c.id === current)) select.value = current;
     if (mapMode === "plan") renderSitePlan();
     else renderStreetMap();
@@ -4431,8 +4438,8 @@ function startPlacing() {
     mapAction = { kind: "place", camId };
     document.getElementById(mapMode === "plan" ? "sitePlan" : "streetMap").classList.add("placing");
     setMapHint(mapMode === "plan"
-        ? `Click where ${cam.code} ${cam.name} is on the plan (Esc cancels)`
-        : `Click where ${cam.code} ${cam.name} is on the map, or set lat/lng with the tile's pin (Esc cancels)`);
+        ? `Click where ${camTitle(cam)} is on the plan (Esc cancels)`
+        : `Click where ${camTitle(cam)} is on the map, or set lat/lng with the tile's pin (Esc cancels)`);
 }
 
 async function placeCameraAt(location) {
@@ -4977,7 +4984,7 @@ function openLocationEditor(camId) {
     const cam = cameras.find(c => c.id === camId);
     if (!cam) return;
     locationCamId = camId;
-    document.getElementById("locationTitle").textContent = `${cam.code} ${cam.name}`;
+    document.getElementById("locationTitle").textContent = camTitle(cam);
     document.getElementById("locName").value = cam.name;
     document.getElementById("locLabel").value = cam.location?.label || "";
     document.getElementById("locLat").value = cam.location?.lat ?? "";

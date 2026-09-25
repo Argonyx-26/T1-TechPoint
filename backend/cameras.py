@@ -395,6 +395,12 @@ class Camera:
         return f"CAM-{self.number:02d}"
 
     @property
+    def title(self) -> str:
+        """"CAM-01" when the name is just the code, else "CAM-02 Main Gate"."""
+        name = self.name.strip()
+        return self.code if not name or name.upper() == self.code else f"{self.code} {name}"
+
+    @property
     def place(self) -> str:
         return self.location.label or self.name
 
@@ -514,9 +520,9 @@ class Camera:
         self.status = STATUS_ONLINE
         self.offline_since = None
         if was_online_before:
-            audit("CAMERA_RECONNECTED", f"{self.code} {self.name} back after {down_for:.0f}s", camera_id=self.id)
+            audit("CAMERA_RECONNECTED", f"{self.title} back after {down_for:.0f}s", camera_id=self.id)
         else:
-            audit("CAMERA_ONLINE", f"{self.code} {self.name} ({source_label(self.source)})", camera_id=self.id)
+            audit("CAMERA_ONLINE", f"{self.title} ({source_label(self.source)})", camera_id=self.id)
 
     def _mark_down(self, was_online: bool):
         now = time.time()
@@ -524,7 +530,7 @@ class Camera:
             self.offline_since = now
             self.status = STATUS_RECONNECTING
             audit("CAMERA_OFFLINE" if was_online else "CAMERA_UNREACHABLE",
-                  f"{self.code} {self.name} ({source_label(self.source)}); retrying", camera_id=self.id)
+                  f"{self.title} ({source_label(self.source)}); retrying", camera_id=self.id)
         elif self.status == STATUS_RECONNECTING and now - self.offline_since >= config.OFFLINE_AFTER_S:
             self.status = STATUS_OFFLINE
 
@@ -557,7 +563,7 @@ class Camera:
                     self.on_frame(self, small, annotated)
                 except Exception as exc:
                     print(f"[{self.id}] analytics hook error: {exc}")
-            draw_camera_label(annotated, f"{self.name} | {self.place}" if self.place != self.name else self.name, self.code)
+            draw_camera_label(annotated, self._overlay_text(), self.code)
             ok, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), config.STREAM_JPEG_QUALITY])
             now = time.time()
             with self._lock:
@@ -573,6 +579,10 @@ class Camera:
                 time.sleep(spare)
 
     # -- read side ------------------------------------------------------------
+    def _overlay_text(self) -> str:
+        parts = [p for p in dict.fromkeys((self.name.strip(), self.place.strip())) if p and p.upper() != self.code]
+        return " | ".join(parts)
+
     def latest_jpeg(self) -> Optional[bytes]:
         with self._lock:
             return self._latest_jpeg
@@ -629,7 +639,7 @@ def resize_to_width(frame, width: int):
 
 def draw_camera_label(frame, text: str, code: str):
     """Camera name + location in the top-right corner of the stream."""
-    label = f"{code}  {text}"
+    label = f"{code}  {text}" if text else code
     font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
     (tw, th), base = cv2.getTextSize(label, font, scale, thick)
     x2 = frame.shape[1] - 6
@@ -727,7 +737,7 @@ class CameraManager:
             name = (name or "").strip() or f"CAM-{int(cam_id.split('-')[1]):02d}"
             camera = self._create(cam_id, name, resolved, Location.from_dict(location, name))
         self.save()
-        audit("CAMERA_ADDED", f"{camera.code} {name} ({source_label(resolved)}) at {camera.place}",
+        audit("CAMERA_ADDED", f"{camera.title} ({source_label(resolved)}) at {camera.place}",
               actor="operator", camera_id=cam_id)
         if start:
             camera.start()
@@ -761,7 +771,7 @@ class CameraManager:
             merged = {**camera.location.to_dict(), **location}
             camera.location = Location.from_dict(merged, camera.name)
         self.save()
-        audit("CAMERA_UPDATED", f"{camera.code} {camera.name} at {camera.place}", actor="operator", camera_id=cam_id)
+        audit("CAMERA_UPDATED", f"{camera.title} at {camera.place}", actor="operator", camera_id=cam_id)
         return camera
 
     def set_source(self, cam_id: str, source: Source, start: bool = True) -> Camera:
@@ -785,7 +795,7 @@ class CameraManager:
         # A camera's zones belong to it: a new camera reusing this id starts clean.
         camera.pipeline.zone_store.replace_all([])
         self.save()
-        audit("CAMERA_REMOVED", f"{camera.code} {camera.name}", actor="operator", camera_id=cam_id)
+        audit("CAMERA_REMOVED", f"{camera.title}", actor="operator", camera_id=cam_id)
 
     def stop_all(self):
         for camera in list(self.cameras.values()):

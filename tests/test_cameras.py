@@ -188,3 +188,22 @@ def test_removed_camera_zones_do_not_leak_to_a_new_camera(manager):
         [Zone(id="v", name="Vault", polygon=[(0, 0), (1, 0), (1, 1), (0, 1)], restricted=True)])
     manager.remove("cam-1")
     assert add(manager, "New gate").pipeline.zone_store.list() == []
+
+
+def test_title_does_not_repeat_the_code(manager):
+    # the single-source flow names camera 1 "CAM-01": its title was "CAM-01 CAM-01"
+    plain = manager.add("CAM-01", "vtest.avi", start=False)
+    named = manager.add("Main Gate", "vtest.avi", start=False)
+    assert plain.title == "CAM-01"
+    assert named.title == "CAM-02 Main Gate"
+    assert plain._overlay_text() == ""
+    assert named._overlay_text() == "Main Gate"
+
+
+def test_alert_message_does_not_repeat_the_code(manager):
+    from backend.alerts.manager import AlertManager
+
+    plain = manager.add("CAM-01", "vtest.avi", start=False)
+    named = manager.add("Main Gate", "vtest.avi", start=False)
+    assert AlertManager._placed("Weapon detected - knife 72%", plain) == "CAM-01: Weapon detected - knife 72%"
+    assert AlertManager._placed("x", named) == "Main Gate (CAM-02): x"

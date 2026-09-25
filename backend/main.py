@@ -664,7 +664,7 @@ def delete_camera(cam_id: str):
 def start_camera(cam_id: str):
     camera = _camera_or_404(cam_id)
     camera.start()
-    audit("CAMERA_STARTED", f"{camera.code} {camera.name}", actor="operator", camera_id=cam_id)
+    audit("CAMERA_STARTED", f"{camera.title}", actor="operator", camera_id=cam_id)
     return camera.to_dict()
 
 
@@ -672,7 +672,7 @@ def start_camera(cam_id: str):
 def stop_camera(cam_id: str):
     camera = _camera_or_404(cam_id)
     camera.stop()
-    audit("CAMERA_STOPPED", f"{camera.code} {camera.name}", actor="operator", camera_id=cam_id)
+    audit("CAMERA_STOPPED", f"{camera.title}", actor="operator", camera_id=cam_id)
     return camera.to_dict()
 
 

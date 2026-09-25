@@ -108,7 +108,12 @@ class AlertManager:
     @staticmethod
     def _placed(message: str, camera) -> str:
         """"Main Gate (CAM-02): Weapon detected - knife 81%"."""
-        return f"{camera.place} ({camera.code}): {message}" if camera is not None else message
+        if camera is None:
+            return message
+        # "CAM-01: ..." when the place is just the code, not "CAM-01 (CAM-01): ..."
+        if not camera.place.strip() or camera.place.strip().upper() == camera.code:
+            return f"{camera.code}: {message}"
+        return f"{camera.place} ({camera.code}): {message}"
 
     def ingest_rule_alerts(self, rule_alerts: List[RuleAlert], frame=None, camera=None) -> List[Alert]:
         created = []
