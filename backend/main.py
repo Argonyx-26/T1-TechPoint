@@ -34,7 +34,13 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return (FRONTEND_DIR / "index.html").read_text()
+    return (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/classic", response_class=HTMLResponse)
+def classic_dashboard():
+    """The original dashboard (frontend/classic.html + /static/app.js)."""
+    return (FRONTEND_DIR / "classic.html").read_text(encoding="utf-8")
 
 
 def _mjpeg_generator():
@@ -62,6 +68,13 @@ def get_status():
 @app.get("/api/alerts")
 def get_alerts(limit: int = 50):
     return [a.to_dict() for a in app_state.pipeline.alert_manager.ranked(limit)]
+
+
+@app.delete("/api/alerts")
+def clear_alerts():
+    """Clear the alert feed (analyst acknowledged). Cooldowns are kept, so a
+    still-ongoing event doesn't instantly re-fire the moment it's cleared."""
+    return {"ok": True, "cleared": app_state.pipeline.alert_manager.clear()}
 
 
 @app.get("/api/alerts/{alert_id}/evidence")

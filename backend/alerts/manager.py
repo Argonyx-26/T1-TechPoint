@@ -152,6 +152,13 @@ class AlertManager:
             alerts = sorted(self._alerts, key=lambda a: (-a.score, -a.timestamp))
             return alerts[:limit]
 
+    def clear(self) -> int:
+        """Drop every stored alert; returns how many were removed."""
+        with self._lock:
+            removed = len(self._alerts)
+            self._alerts = []
+            return removed
+
     def total_count(self) -> int:
         with self._lock:
             return self._total_count
