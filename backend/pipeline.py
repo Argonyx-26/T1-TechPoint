@@ -68,8 +68,7 @@ class FramePipeline:
         self.last_tracks = tracks  # read by the per-camera analytics hooks (search, behaviour)
         # Low-confidence throwables are tracked for throw detection only: the
         # rules, overlay and counts see exactly what they saw before.
-        tracks = {tid: t for tid, t in tracks.items()
-                  if t.cls_name == config.PERSON_CLASS or t.conf >= config.DETECTOR_CONF_THRESHOLD}
+        tracks = {tid: t for tid, t in tracks.items() if t.conf >= config.DETECTOR_CONF_THRESHOLD}
         rule_alerts = self.rule_engine.evaluate(tracks, zones, timestamp)
         # Low-floor detections (down to WEAPON_MIN_CONF) -- used only for
         # keeping the on-screen box/label visually continuous. Anything that

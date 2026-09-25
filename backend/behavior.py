@@ -120,14 +120,35 @@ def is_upright(obs: PoseObs) -> bool:
 
 
 def is_down(obs: PoseObs) -> bool:
-    """Horizontal body: wide box and hips near ankle height."""
-    if obs.width / obs.height <= config.DOWN_ASPECT:
+    """Horizontal body: a wide box, and one of: the box is very wide, the
+    torso lies more than DOWN_TORSO_DEG from vertical, or the hips are near
+    ankle height. (Hips-vs-ankles alone missed people lying at an angle to
+    the camera with bent legs: UR Fall fall-06.)"""
+    aspect = obs.width / obs.height
+    if aspect <= config.DOWN_ASPECT:
         return False
+    if aspect >= config.DOWN_STRONG_ASPECT:
+        return True
+    shoulder = _mid(obs.kp(L_SH), obs.kp(R_SH))
     hip = _mid(obs.kp(L_HIP), obs.kp(R_HIP))
+    if shoulder is not None and hip is not None:
+        dx, dy = abs(shoulder[0] - hip[0]), abs(shoulder[1] - hip[1])
+        if math.degrees(math.atan2(dx, dy)) >= config.DOWN_TORSO_DEG:
+            return True
     ankle = _mid(obs.kp(L_ANK), obs.kp(R_ANK))
     if hip is None or ankle is None:
-        return True  # box alone is strongly horizontal; lying legs are often occluded
+        return True  # box alone is horizontal; lying legs are often occluded
     return abs(hip[1] - ankle[1]) <= config.DOWN_HIP_ANKLE_FRAC * obs.width
+
+
+def box_upright(box) -> bool:
+    return (box[3] - box[1]) / max(1.0, box[2] - box[0]) >= config.UPRIGHT_ASPECT
+
+
+def box_down(box) -> bool:
+    """Tracker box alone: the pose model often finds no skeleton on someone
+    lying on the floor, but the person detector still boxes them."""
+    return (box[2] - box[0]) / max(1.0, box[3] - box[1]) > config.DOWN_ASPECT
 
 
 def _relative_speed(prev: PoseObs, cur: PoseObs, i: int) -> Optional[float]:
@@ -341,11 +362,17 @@ class CameraBehaviour:
     gates: Dict[Tuple, SustainGate] = field(default_factory=dict)
     fired: Dict[Tuple, float] = field(default_factory=dict)
     upright_seen: Dict[int, float] = field(default_factory=dict)
+    # (ts, box) of every upright sighting: a fall often breaks the track (the
+    # detector loses the person mid-fall and re-finds them under a new id),
+    # so "was upright" is also judged by place, not only by track id.
+    upright_spots: Deque[Tuple[float, Tuple[float, float, float, float], int]] = field(default_factory=deque)
     objects: Dict[int, Deque[Tuple[float, Tuple[float, float], str]]] = field(default_factory=dict)
     object_last_seen: Dict[int, float] = field(default_factory=dict)
     speeds: Dict[int, Deque[Tuple[float, float]]] = field(default_factory=dict)
     panic_gate: SustainGate = field(default_factory=SustainGate)
     prev_gray: Optional[np.ndarray] = None
+    crowd_hist: Deque[Tuple[float, int, float]] = field(default_factory=deque)  # (ts, people, motion)
+    prev_small: Optional[np.ndarray] = None
     blob_trails: Dict[int, List[Tuple[float, Tuple[float, float]]]] = field(default_factory=dict)
     overlays: List[Tuple[float, BehaviourEvent]] = field(default_factory=list)
 
@@ -369,21 +396,36 @@ class CameraBehaviour:
             hist.append(obs)
             if is_upright(obs):
                 self.upright_seen[tid] = ts
+                self.upright_spots.append((ts, obs.bbox, tid))
+        for tid, track in tracks.items():
+            if tid not in people and getattr(track, "cls_name", "") == "person" and box_upright(track.bbox):
+                self.upright_seen[tid] = ts
+                self.upright_spots.append((ts, tuple(track.bbox), tid))
+        while self.upright_spots and self.upright_spots[0][0] < ts - config.UPRIGHT_LOOKBACK_S:
+            self.upright_spots.popleft()
 
+        # Low-confidence people (DOWN_LOW_CONF..threshold) exist for person
+        # down only; every other rule sees the same people as the rest of the system.
+        thr = config.DETECTOR_CONF_THRESHOLD
+        sure_tracks = {tid: t for tid, t in tracks.items() if getattr(t, "conf", 1.0) >= thr}
+        sure = {tid: o for tid, o in people.items() if tid not in tracks or tid in sure_tracks}
         if enabled("distress"):
-            events += self._hands_and_down(ts, people, weapon_recent)
-            events += self._panic(ts, tracks, diag)
+            events += self._dispersal(ts, len([t for t in sure_tracks.values() if t.cls_name == "person"]), gray)
+            events += self._hands_raised(ts, sure, weapon_recent)
+            events += self._person_down(ts, people, tracks, frame_w=w, now_upright={
+                tid for tid, t in tracks.items() if getattr(t, "cls_name", "") == "person" and box_upright(t.bbox)})
+            events += self._panic(ts, sure_tracks, diag)
         if enabled("fighting"):
-            events += self._fights(ts, people)
+            events += self._fights(ts, sure)
         if enabled("throwing"):
-            events += self._throws(ts, people, tracks, diag, restricted, gray)
+            events += self._throws(ts, sure, tracks, diag, restricted, gray)
         for tid in [t for t in self.poses if t not in people and ts - self.poses[t][-1].ts > 5]:
             self.poses.pop(tid, None)
         self.overlays = [(t, e) for t, e in self.overlays if ts - t < 4] + [(ts, e) for e in events]
         return events
 
     # -- distress ---------------------------------------------------------------------
-    def _hands_and_down(self, ts, people, weapon_recent):
+    def _hands_raised(self, ts, people, weapon_recent):
         out = []
         for tid, obs in people.items():
             hands = self.gate(HANDS_RAISED, tid)
@@ -393,13 +435,74 @@ class CameraBehaviour:
                     HANDS_RAISED,
                     f"Hands raised - possible hold-up (#{tid})" + (" with a weapon on this camera" if weapon_recent else ""),
                     [tid], obs.bbox, band="CRITICAL" if weapon_recent else None, label="HANDS RAISED"))
-            down = self.gate(PERSON_DOWN, tid)
-            was_up = ts - self.upright_seen.get(tid, -1e9) <= config.UPRIGHT_LOOKBACK_S
-            down.add(ts, is_down(obs) and was_up, config.PERSON_DOWN_S * 2)
-            if down.held_for(ts) >= config.PERSON_DOWN_S and self._once((PERSON_DOWN, tid), ts):
-                out.append(BehaviourEvent(PERSON_DOWN, f"Person down - possible medical emergency (#{tid})",
-                                          [tid], obs.bbox, label="PERSON DOWN"))
         return out
+
+    def _was_upright_here(self, tid, box, ts, now_upright=frozenset()) -> bool:
+        """Upright on this track, or someone stood upright right where this
+        person now lies (feet within one body height of this box) AND is no
+        longer standing there: in a fall the standing person turns into the
+        lying one. In a crowd the people standing next to a false box are
+        still standing, so they do not count."""
+        if ts - self.upright_seen.get(tid, -1e9) <= config.UPRIGHT_LOOKBACK_S:
+            return True
+        cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+        for t, ub, utid in self.upright_spots:
+            if utid in now_upright or ts - t > config.UPRIGHT_LOOKBACK_S:
+                continue
+            height = ub[3] - ub[1]
+            fx, fy = (ub[0] + ub[2]) / 2, ub[3]
+            long_enough = box[2] - box[0] >= config.DOWN_MIN_LENGTH * height   # not a head at the frame edge
+            if long_enough and math.hypot(cx - fx, cy - fy) <= config.DOWN_NEAR_UPRIGHT * height:
+                return True
+        return False
+
+    def _person_down(self, ts, people, tracks, now_upright=frozenset(), frame_w=None):
+        """Every tracked person, with or without a skeleton: pose decides
+        when there is one, the box shape when there is not."""
+        bodies = {tid: (obs.bbox, obs) for tid, obs in people.items()}
+        for tid, track in tracks.items():
+            if tid not in bodies and getattr(track, "cls_name", "") == "person" and tid >= 0:
+                bodies[tid] = (tuple(track.bbox), None)
+        out = []
+        for tid, (box, obs) in bodies.items():
+            if obs is not None:
+                lying = is_down(obs)
+            else:   # no skeleton: trust the box only when it is body-sized, not a fragment at the frame edge
+                lying = box_down(box) and (not frame_w or box[2] - box[0] >= config.DOWN_BOX_MIN_WIDTH * frame_w)
+            gate = self.gate(PERSON_DOWN, tid)
+            gate.add(ts, lying and self._was_upright_here(tid, box, ts, now_upright), config.PERSON_DOWN_S * 2)
+            if gate.held_for(ts) >= config.PERSON_DOWN_S and self._once((PERSON_DOWN, tid), ts):
+                out.append(BehaviourEvent(PERSON_DOWN, f"Person down - possible medical emergency (#{tid})",
+                                          [tid], box, label="PERSON DOWN"))
+        return out
+
+    def _dispersal(self, ts, count, gray):
+        """Crowd dispersing: the count collapses while the scene's motion
+        spikes (see PANIC_DISPERSE_*)."""
+        motion = 0.0
+        if gray is not None:
+            small = cv2.resize(gray, (160, max(1, int(160 * gray.shape[0] / gray.shape[1]))))
+            if self.prev_small is not None and self.prev_small.shape == small.shape:
+                motion = float(np.mean(cv2.absdiff(small, self.prev_small)))
+            self.prev_small = small
+        hist = self.crowd_hist
+        hist.append((ts, count, motion))
+        w = config.PANIC_DISPERSE_WINDOW_S
+        while hist and hist[0][0] < ts - 3 * w:
+            hist.popleft()
+        before = [c for t, c, _ in hist if ts - 2 * w <= t < ts - w]
+        recent = [c for t, c, _ in hist if t >= ts - 1.0]
+        calm = [m for t, _, m in hist if t < ts - w]
+        moving = [m for t, _, m in hist if t >= ts - w]
+        if len(before) < 3 or not recent or len(calm) < 3 or not moving:
+            return []
+        base = float(np.median(before))
+        collapsed = base >= config.PANIC_DISPERSE_MIN and max(recent) <= config.PANIC_DISPERSE_FRAC * base
+        spiked = max(moving) >= config.PANIC_MOTION_RATIO * max(float(np.median(calm)), 1.0)
+        if collapsed and spiked and self._once((CROWD_PANIC,), ts):
+            return [BehaviourEvent(CROWD_PANIC, f"Possible panic - crowd dispersing ({base:.0f} -> {max(recent)} people "
+                                                f"in {w:.0f}s, sudden motion)", [], None, label="PANIC")]
+        return []
 
     def _panic(self, ts, tracks, diag):
         movers = []
@@ -549,7 +652,8 @@ class BehaviourEngine:
             people = self._pose(frame, people_tracks, now)
             h, w = frame.shape[:2]
             restricted = [z.to_pixels(w, h).polygon for z in camera.pipeline.zone_store.list() if z.restricted]
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if features.enabled("throwing") else None
+            gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    if features.enabled("throwing") or features.enabled("distress") else None)
             events = state.update(now, people, tracks, (w, h), restricted, gray=gray,
                                   weapon_recent=self._weapon_recent(camera.id, now), enabled=features.enabled)
             for event in events:

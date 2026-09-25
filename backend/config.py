@@ -204,8 +204,14 @@ HANDS_RAISED_S = 2.0             # both wrists above the nose this long
 HANDS_RAISED_WEAPON_S = 30.0     # ...CRITICAL if a weapon was confirmed on the camera this recently
 UPRIGHT_ASPECT = 1.4             # box h/w for "upright"
 DOWN_ASPECT = 1.2                # box w/h for "horizontal"
+DOWN_LOW_CONF = 0.2              # people lying on the floor score low as 'person': the person-down rule (only) sees them from here
+DOWN_STRONG_ASPECT = 1.5         # this wide is lying whatever the skeleton says
+DOWN_TORSO_DEG = 55.0            # shoulders->hips this far from vertical = lying
 DOWN_HIP_ANKLE_FRAC = 0.25       # hips within this fraction of the box width of ankle height
 UPRIGHT_LOOKBACK_S = 10.0        # must have been upright this recently (falls, not sleepers)
+DOWN_BOX_MIN_WIDTH = 0.10        # box-only (no skeleton) candidates narrower than this x frame width are fragments, not bodies
+DOWN_MIN_LENGTH = 0.6            # a lying body is about as long as it stood tall: box width >= this x that height
+DOWN_NEAR_UPRIGHT = 1.0          # ...on this track, or anyone upright within this x their height of the spot
 PERSON_DOWN_S = 3.0
 FIGHT_WINDOW_S = 2.0
 FIGHT_MIN_RATIO = 0.6            # positive in >= 60% of pose frames over the window
@@ -227,6 +233,13 @@ PANIC_BASELINE_S = 10.0
 PANIC_MIN_SPEED = 0.12           # frame diagonals per second
 PANIC_AWAY_COS = 0.5
 PANIC_SUSTAIN_S = 1.0
+# Crowd dispersal (second panic trigger): runners blur and lose their tracks,
+# so on real footage (UMN) the per-runner rule sees 1-4 runners while the
+# crowd count collapses. Fires when both happen within a few seconds:
+PANIC_DISPERSE_MIN = 5           # crowd of at least this many (median over the baseline window)...
+PANIC_DISPERSE_FRAC = 0.5        # ...drops to at most this fraction of it...
+PANIC_DISPERSE_WINDOW_S = 4.0    # ...within this many seconds...
+PANIC_MOTION_RATIO = 2.0         # ...while frame motion is at least this x its recent median
 
 # --- Blind-spot tracking between linked cameras ---------------------------------
 GAP_ALERT_S = 60.0             # gap alert when longer than max(2 x link walking time, this)

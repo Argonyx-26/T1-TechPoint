@@ -241,7 +241,8 @@ class SearchIndex:
         tracks = getattr(camera.pipeline, "last_tracks", {}) or {}
         with self._lock:
             for track in tracks.values():
-                if track.cls_name not in config.SEARCH_CLASSES or track.track_id < 0:
+                if (track.cls_name not in config.SEARCH_CLASSES or track.track_id < 0
+                        or track.conf < config.DETECTOR_CONF_THRESHOLD):   # low-conf people are for person-down only
                     continue
                 sighting = self._sighting(camera.id, track, now, (w, h))
                 zone = next((z.name for z in zones if point_in_polygon(track.centroid, z.polygon)), None)

@@ -1,0 +1,371 @@
+[
+ {
+  "clip": "caviar/Fight_Chase.mpg",
+  "expect": [
+   "FIGHT"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Fight_RunAway1.mpg",
+  "expect": [
+   "FIGHT"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Fight_RunAway2.mpg",
+  "expect": [
+   "FIGHT"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Fight_OneManDown.mpg",
+  "expect": [
+   "FIGHT",
+   "PERSON_DOWN"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Rest_FallOnFloor.mpg",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Rest_SlumpOnFloor.mpg",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Rest_WiggleOnFloor.mpg",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse1.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse2.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse3.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse4.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse_WhileWaiting1.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Browse_WhileWaiting2.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Meet_Crowd.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Meet_Split_3rdGuy.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Meet_WalkSplit.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Meet_WalkTogether1.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Meet_WalkTogether2.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Walk1.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Walk2.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Walk3.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/Rest_InChair.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "caviar/LeftBag.mpg",
+  "expect": [],
+  "source": "CAVIAR"
+ },
+ {
+  "clip": "umn/Crowd-Activity-All.avi",
+  "expect": [
+   "CROWD_PANIC"
+  ],
+  "source": "UMN (11 scenes: normal walking, then the crowd suddenly scatters)"
+ },
+ {
+  "clip": "umn/Thrown-Object-All.avi",
+  "expect": [
+   "OBJECT_THROWN"
+  ],
+  "source": "UMN"
+ },
+ {
+  "clip": "urfall_cam0/fall-01",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-02",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-03",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-04",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-05",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-06",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-07",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-08",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-09",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-10",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-11",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-12",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-13",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-14",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/fall-15",
+  "expect": [
+   "PERSON_DOWN"
+  ],
+  "fps": 30,
+  "hold_last_s": 5,
+  "source": "UR Fall (side view)"
+ },
+ {
+  "clip": "urfall_cam0/adl-01",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-02",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-03",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-04",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-05",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-06",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-07",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-08",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-09",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "urfall_cam0/adl-10",
+  "expect": [],
+  "fps": 30,
+  "source": "UR Fall ADL (daily activities)"
+ },
+ {
+  "clip": "repo:sample_data/vtest.avi",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ },
+ {
+  "clip": "repo:sample_data/confusers.mp4",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ },
+ {
+  "clip": "repo:data/captures/sim_gate_long.mp4",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ },
+ {
+  "clip": "repo:data/captures/sim_lobby_long.mp4",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ },
+ {
+  "clip": "repo:data/captures/phones_test.mp4",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ },
+ {
+  "clip": "repo:data/captures/cctv_knife.mp4",
+  "expect": [],
+  "source": "local footage (argonyx)"
+ }
+]

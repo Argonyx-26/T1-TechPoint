@@ -70,10 +70,14 @@ class SharedModels:
         """Raw detections as an ultralytics Boxes array (numpy) + class names."""
         with self._lock:
             self._ensure_general()
-            low = config.THROW_LOW_CONF if features.enabled("throwing") else config.DETECTOR_CONF_THRESHOLD
+            floor = [config.DETECTOR_CONF_THRESHOLD]
+            if features.enabled("throwing"):
+                floor.append(config.THROW_LOW_CONF)
+            if features.enabled("distress"):
+                floor.append(config.DOWN_LOW_CONF)
             result = self._general.predict(
                 frame,
-                conf=min(low, config.DETECTOR_CONF_THRESHOLD),
+                conf=min(floor),
                 device=config.DEVICE,
                 half=config.USE_HALF_PRECISION,
                 verbose=False,
@@ -117,10 +121,16 @@ class CameraObjectDetector:
         boxes, names = self.shared.detect(frame)
         if len(boxes) == 0:
             return []
-        # Below the normal threshold only throwable classes survive (throw detection).
+        # Below the normal threshold only throwable classes (throw detection) and
+        # people from DOWN_LOW_CONF (person down: someone lying on the floor
+        # scores low) survive; the pipeline drops both again before the rules,
+        # overlay and counts, so only the behaviour module ever sees them.
+        down = features.enabled("distress")
         keep = [
             i for i in range(len(boxes))
-            if boxes.conf[i] >= config.DETECTOR_CONF_THRESHOLD or names.get(int(boxes.cls[i])) in config.THROW_CLASSES
+            if boxes.conf[i] >= config.DETECTOR_CONF_THRESHOLD
+            or names.get(int(boxes.cls[i])) in config.THROW_CLASSES
+            or (down and names.get(int(boxes.cls[i])) == config.PERSON_CLASS and boxes.conf[i] >= config.DOWN_LOW_CONF)
         ]
         if len(keep) != len(boxes):
             boxes = boxes[keep]

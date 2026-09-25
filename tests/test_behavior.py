@@ -268,3 +268,65 @@ def test_module_switches_persist(tmp_path, monkeypatch):
     assert features.enabled("search") is False
     assert features.enabled("pose") is True
     assert "bogus" not in features.all_features()
+
+
+# ---------------- measured on real footage (tools/eval_behaviour.py) ----------------
+class _T:
+    def __init__(self, box, conf=0.9, cls="person"):
+        self.bbox, self.conf, self.cls_name = box, conf, cls
+        self.history, self.centroid, self.track_id = [], ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), 0
+
+
+def _down_run(frames, fps=6.0):
+    state, events = CameraBehaviour(), []
+    for i, tracks in enumerate(frames):
+        events += state.update(1000.0 + i / fps, {}, tracks, FRAME, [])
+    return [e for e in events if e.rule == PERSON_DOWN]
+
+
+def test_fall_with_track_id_switch_and_no_skeleton_is_person_down():
+    # UR Fall fall-01: standing #2, lost mid-fall, re-found lying as #8; pose finds no skeleton
+    stand = [{2: _T((410, 110, 470, 330))}] * 12
+    gap = [{}] * 6
+    lying = [{8: _T((232, 375, 406, 480), conf=0.3)}] * 30
+    ev = _down_run(stand + gap + lying)
+    assert len(ev) == 1 and ev[0].track_ids == [8]
+
+
+def test_small_fragment_at_frame_edge_is_not_person_down():
+    # UMN: a 22x17 px piece of someone cut off by the frame bottom, where people just ran away
+    stand = [{5: _T((80, 180, 100, 238))}] * 12
+    frag = [{9: _T((75, 223, 97, 240), conf=0.34)}] * 30
+    assert _down_run(stand + frag) == []
+
+
+def test_lying_next_to_people_still_standing_is_not_person_down():
+    stand = {1: _T((300, 100, 360, 330)), 2: _T((380, 100, 440, 330))}
+    frames = [dict(stand)] * 12 + [{**stand, 3: _T((250, 300, 450, 380), conf=0.3)}] * 30
+    assert _down_run(frames) == []
+
+
+def _crowd_frames(counts, motions, fps=6.0):
+    import numpy as np
+    state, events = CameraBehaviour(), []
+    base = np.zeros((120, 160), np.uint8)
+    for i, (n, m) in enumerate(zip(counts, motions)):
+        gray = base + np.uint8(m * (i % 2))   # alternating frames: mean abs diff = m
+        tracks = {k: _T((10 * k, 50, 10 * k + 8, 90)) for k in range(n)}
+        events += state.update(1000.0 + i / fps, {}, tracks, FRAME, [], gray=gray)
+    return [e for e in events if e.rule == CROWD_PANIC]
+
+
+def test_crowd_scattering_is_possible_panic():
+    # UMN: ~14 people milling about, then within 2 s most run out of view with a motion spike
+    counts = [14] * 60 + [9, 7, 5, 4, 3, 3] * 2 + [2] * 20
+    motions = [4] * 60 + [15] * 32
+    ev = _crowd_frames(counts, motions)
+    assert len(ev) == 1 and "crowd dispersing" in ev[0].message
+
+
+def test_crowd_leaving_calmly_is_not_panic():
+    # the same drop spread over 20 s, at walking-level motion
+    counts = [14] * 60 + [14 - k // 10 for k in range(120)]
+    motions = [4] * 180
+    assert _crowd_frames(counts, motions) == []
