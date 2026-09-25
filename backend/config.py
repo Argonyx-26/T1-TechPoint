@@ -27,8 +27,24 @@ WEAPON_EVERY_N_FRAMES = 1   # raise on slow CPU machines; the window then spans 
 DISPLAY_CONF = 0.25
 ALERT_CONF = 0.5
 
-# COCO classes the general detector tracks (0 = person). None tracks everything.
-TRACKED_CLASSES = None
+# COCO classes the general detector tracks and draws, by name, with a fixed BGR color each.
+# Anything else COCO knows (chairs, TVs, ...) is ignored. Order = order in the counts panel.
+SECURITY_CLASSES = {
+    "person": (0, 200, 0),
+    "backpack": (255, 140, 0),
+    "handbag": (200, 0, 200),
+    "suitcase": (140, 70, 20),
+    "bottle": (255, 255, 0),
+    "cell phone": (0, 255, 255),
+    "laptop": (255, 0, 150),
+    "umbrella": (120, 200, 255),
+    "knife": (0, 100, 255),
+    "scissors": (80, 160, 255),
+    "bicycle": (180, 255, 120),
+    "car": (255, 200, 120),
+    "motorcycle": (160, 120, 255),
+}
+IN_RESTRICTED_COLOR = (0, 0, 255)  # persons inside a restricted zone
 
 # Tracks not seen for this long are dropped from the track manager
 TRACK_STALE_SECONDS = 2.0

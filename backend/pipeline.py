@@ -17,10 +17,8 @@ from backend.rules import RulesEngine, Thresholds
 from backend.tracking import GeneralDetector, TrackManager
 from backend.video_source import VideoSource
 from backend.weapon_filter import WeaponFilter
-from backend.zones import ZoneStore
+from backend.zones import ZoneStore, point_in_polygon
 
-PERSON_COLOR = (0, 200, 0)
-OBJECT_COLOR = (200, 160, 0)
 WEAPON_RAW_COLOR = (0, 140, 255)
 CRITICAL_COLOR = (0, 0, 220)
 RESTRICTED_ZONE_COLOR = (0, 0, 255)
@@ -54,6 +52,7 @@ class Pipeline:
         self.fps = 0.0
         self.latency_ms = 0.0
         self.active_tracks: list = []
+        self.object_counts: dict[str, int] = {}
         self.last_error: str | None = None
 
     # ---- lifecycle -------------------------------------------------------
@@ -97,6 +96,7 @@ class Pipeline:
             self.source.close()
             self.source = None
         self.active_tracks = []
+        self.object_counts = {}
         self.fps = 0.0
         self._publish(self._idle_frame("Stopped - pick a camera or video"))
 
@@ -107,10 +107,12 @@ class Pipeline:
     def status(self) -> dict:
         running = self.running
         src = self.source
+        counts = dict(self.object_counts) if running else {}
         return {
             "running": running,
             "source": src.label if (running and src) else None,
-            "object_count": len(self.active_tracks) if running else 0,
+            "object_count": sum(counts.values()),
+            "object_counts": counts,
             "fps": round(self.fps, 1) if running else 0.0,
             "latency_ms": round(self.latency_ms, 1) if running else 0.0,
             "device": config.DEVICE,
@@ -150,6 +152,7 @@ class Pipeline:
             detections = []
         active = self.tracks.update(detections)
         self.active_tracks = active
+        self.object_counts = self._count(active)
         h, w = frame.shape[:2]
         zones = self.zones.all()
         events = self.rules.evaluate(active, zones, (w, h))
@@ -165,8 +168,10 @@ class Pipeline:
         self.frame_index += 1
 
         self._draw_zones(frame, zones)
-        self._draw(frame, active)
-        self._draw_weapons(frame, self.weapon_dets, self.confirmed_weapons)
+        self._draw(frame, active, self._in_restricted(active, zones, (w, h)))
+        # Weapon boxes go on top; the counts panel moves below the threat banner when shown
+        banner_h = self._draw_weapons(frame, self.weapon_dets, self.confirmed_weapons)
+        self._draw_counts(frame, self.object_counts, top=banner_h)
         jpeg = self._encode(frame)
 
         # Weapon alerts come only from the confirmed state; the manager's cooldown
@@ -191,7 +196,22 @@ class Pipeline:
             cv2.putText(frame, label, (int(x) + 6, max(int(y) - 8, 14)), cv2.FONT_HERSHEY_SIMPLEX,
                         0.55, color, 2, cv2.LINE_AA)
 
-    def _draw_weapons(self, frame, dets, confirmed: set) -> None:
+    @staticmethod
+    def _count(tracks) -> dict[str, int]:
+        counts = {name: 0 for name in config.SECURITY_CLASSES}
+        for t in tracks:
+            counts[t.cls_name] = counts.get(t.cls_name, 0) + 1
+        return {k: v for k, v in counts.items() if v}
+
+    @staticmethod
+    def _in_restricted(tracks, zones, frame_size) -> set[int]:
+        w, h = frame_size
+        polys = [z.pixel_polygon(w, h) for z in zones if z.restricted]
+        return {t.track_id for t in tracks if t.cls_name == "person"
+                and any(point_in_polygon(t.foot_point, p) for p in polys)}
+
+    def _draw_weapons(self, frame, dets, confirmed: set) -> int:
+        """Draw weapon boxes and the threat banner. Returns the banner height (0 if none)."""
         for d in dets:
             x1, y1, x2, y2 = map(int, d.bbox)
             color = CRITICAL_COLOR if d.cls_name in confirmed else WEAPON_RAW_COLOR
@@ -199,17 +219,32 @@ class Pipeline:
             cv2.putText(frame, f"{d.cls_name} {d.conf:.2f}", (x1, max(y2 + 16, 16)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
         if not confirmed:
-            return
+            return 0
         # Gated on the sustained/confirmed state only, never on a raw single-frame hit
         text = "CRITICAL THREAT: " + ", ".join(sorted(confirmed)).upper()
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
         cv2.rectangle(frame, (0, 0), (tw + 24, th + 24), CRITICAL_COLOR, -1)
         cv2.putText(frame, text, (12, th + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+        return th + 24
 
-    def _draw(self, frame, tracks) -> None:
+    @staticmethod
+    def _draw_counts(frame, counts: dict, top: int = 0) -> None:
+        text = " | ".join(f"{k}: {v}" for k, v in counts.items()) or "no objects"
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        x, y = 8, top + 8
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x, y), (x + tw + 12, y + th + 12), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, dst=frame)
+        cv2.putText(frame, text, (x + 6, y + th + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 255, 255), 1, cv2.LINE_AA)
+
+    def _draw(self, frame, tracks, in_restricted: set[int]) -> None:
         for t in tracks:
             x1, y1, x2, y2 = map(int, t.bbox)
-            color = PERSON_COLOR if t.cls_name == "person" else OBJECT_COLOR
+            if t.track_id in in_restricted:
+                color = config.IN_RESTRICTED_COLOR
+            else:
+                color = config.SECURITY_CLASSES.get(t.cls_name, (200, 160, 0))
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             label = f"{t.cls_name} #{t.track_id} {t.conf:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)

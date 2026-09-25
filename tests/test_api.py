@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 
 from backend import config
 
-STATUS_KEYS = {"running", "source", "object_count", "fps", "latency_ms", "device", "alert_count"}
+STATUS_KEYS = {"running", "source", "object_count", "object_counts", "fps", "latency_ms", "device",
+               "alert_count"}
 ALERT_KEYS = {"id", "type", "rule", "severity", "description", "message", "timestamp",
               "created_at", "zone", "track_id", "has_evidence"}
 

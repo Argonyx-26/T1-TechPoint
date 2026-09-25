@@ -29,8 +29,9 @@ disagree, the frontend wins and this file gets updated.
 
 ## GET /video_feed
 
-MJPEG stream (`multipart/x-mixed-replace; boundary=frame`) of the annotated video: person/object
-boxes with track IDs, zones (restricted red, others amber, with names), raw weapon boxes, and a
+MJPEG stream (`multipart/x-mixed-replace; boundary=frame`) of the annotated video: a box per
+tracked object labelled `person #12 0.87` (one fixed color per class, persons inside a restricted
+zone in red), a class-count panel top-left (`person: 3 | backpack: 1`), zones (restricted red, others amber, with names), raw weapon boxes, and a
 `CRITICAL THREAT: <CLASS>` banner only while a weapon is confirmed (5 of the last 8 inference
 frames at conf >= 0.5). Shows a placeholder frame when no source is running.
 
@@ -45,6 +46,7 @@ frames at conf >= 0.5). Shows a placeholder frame when no source is running.
   "running": true,
   "source": "sample: vtest.avi",
   "object_count": 6,
+  "object_counts": {"person": 5, "handbag": 1},
   "fps": 9.8,
   "latency_ms": 51.1,
   "device": "cuda:0",
@@ -56,12 +58,15 @@ frames at conf >= 0.5). Shows a placeholder frame when no source is running.
 - `fps` is the pipeline rate. File sources play at their native frame rate (vtest.avi is 10 fps).
 - `latency_ms` is the processing time of the last frame (detection, tracking, rules, weapon model, drawing, encoding).
 - `device` is `"cuda:0"` or `"cpu"`.
-- `object_count` is the number of tracked objects in the current frame (all COCO classes).
+- `object_counts` maps class name to how many are tracked in the current frame (only classes
+  present); `object_count` is their total. Tracked classes are `config.SECURITY_CLASSES`: person,
+  backpack, handbag, suitcase, bottle, cell phone, laptop, umbrella, knife, scissors, bicycle, car,
+  motorcycle.
 
 Idle:
 
 ```json
-{"running": false, "source": null, "object_count": 0, "fps": 0.0, "latency_ms": 0.0, "device": "cuda:0", "alert_count": 0}
+{"running": false, "source": null, "object_count": 0, "object_counts": {}, "fps": 0.0, "latency_ms": 0.0, "device": "cuda:0", "alert_count": 0}
 ```
 
 ## POST /api/source/camera

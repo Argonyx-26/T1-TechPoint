@@ -37,6 +37,11 @@ class GeneralDetector:
         # Loaded once per process; overwriting the file on disk needs a server restart
         self.model = YOLO(str(weights) if weights.is_file() else "yolov8n.pt")
         self.names = self.model.names
+        by_name = {n: i for i, n in self.names.items()}
+        missing = set(config.SECURITY_CLASSES) - set(by_name)
+        if missing:
+            raise ValueError(f"not COCO classes: {', '.join(sorted(missing))}")
+        self.classes = sorted(by_name[n] for n in config.SECURITY_CLASSES)
 
     def warmup(self) -> None:
         import numpy as np
@@ -50,7 +55,7 @@ class GeneralDetector:
             persist=True,
             tracker=config.TRACKER_CFG,
             conf=config.DISPLAY_CONF,
-            classes=config.TRACKED_CLASSES,
+            classes=self.classes,
             imgsz=config.INFER_IMGSZ,
             device=config.DEVICE,
             verbose=False,
