@@ -12,8 +12,11 @@ GENERAL_MODEL_PATH = os.environ.get("ARGONYX_GENERAL_MODEL", "yolov8n.pt")
 # Weapon detector: a separate pretrained/fine-tuned YOLO model (gun/knife
 # classes). Drop a compatible .pt file at this path to enable it; the system
 # runs fully without it (weapon alerts are simply never raised).
+# Active model: run15 (run10 fine-tuned on horizontal-phone frames; fixes the
+# phone -> pistol/knife false alarm). models/weapon.pt is still run10 -- point
+# this back at it (or set ARGONYX_WEAPON_MODEL) to revert.
 WEAPON_MODEL_PATH = Path(
-    os.environ.get("ARGONYX_WEAPON_MODEL", BASE_DIR / "models" / "weapon.pt")
+    os.environ.get("ARGONYX_WEAPON_MODEL", BASE_DIR / "models" / "weapon_run15.pt")
 )
 WEAPON_IMGSZ = 960  # higher than the 640 default -- gives small/distant objects more pixels to be detected from
 # Only these weapon-model classes count as an actual threat. The other
