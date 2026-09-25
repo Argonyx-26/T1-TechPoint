@@ -218,12 +218,15 @@ class AlertManager:
             self._alerts = []
             return removed
 
-    def active_count(self, camera_id: Optional[str] = None) -> int:
-        """Unacknowledged alerts currently in the feed, optionally for one camera."""
+    def active_count(self, camera_id: Optional[str] = None, band: Optional[str] = None) -> int:
+        """Unacknowledged alerts currently in the feed, optionally for one
+        camera and/or one severity band."""
         with self._lock:
             return sum(
                 1 for a in self._alerts
-                if a.acknowledged_at is None and (camera_id is None or a.camera_id == camera_id)
+                if a.acknowledged_at is None
+                and (camera_id is None or a.camera_id == camera_id)
+                and (band is None or a.band == band)
             )
 
     def total_count(self) -> int:

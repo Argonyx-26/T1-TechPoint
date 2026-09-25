@@ -777,11 +777,30 @@ textarea:focus {
 .alert-item.acknowledged { opacity: 0.45; }
 
 /* camera wall: backend camera states */
+.camera-tile { cursor: pointer; position: relative; }
+.camera-tile.focused { border-color: var(--khaki); box-shadow: 0 0 0 1px var(--khaki) inset; }
+.camera-tile.critical { border-color: #ef5a3a; animation: criticalPulse 1s ease-in-out infinite; }
+@keyframes criticalPulse {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(239, 90, 58, .9), 0 0 0 0 rgba(239, 90, 58, .55); }
+    50% { box-shadow: 0 0 0 1px rgba(239, 90, 58, .9), 0 0 18px 4px rgba(239, 90, 58, .45); }
+}
+.cam-alert-badge {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-flex;
+    align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 9px; font-weight: 800;
+    background: rgba(187, 104, 48, .25); color: var(--earth);
+}
+.cam-alert-badge.critical { background: #ef5a3a; color: #fff; }
+.cam-alert-badge.none { display: none; }
+.camera-stats { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px 0;
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .6px; color: var(--text-muted); }
+.camera-pin { width: 26px; height: 26px; padding: 0 !important; font-size: 13px !important; }
+.camera-tile.waiting { cursor: default; border-style: dashed; }
+.camera-tile.waiting .camera-feed { display: flex; align-items: center; justify-content: center; }
 .camera-live.reconnecting { color: var(--khaki); }
 .camera-live.reconnecting::before { background: var(--khaki); animation: dotPulse 1s ease-in-out infinite; }
 .camera-live.stopped { color: var(--wasabi-dim); }
 .camera-live.stopped::before { background: var(--wasabi-dim); }
-.camera-feed img { display: block; object-fit: contain; background: #080d0c; }
+.camera-tile .camera-feed img { display: block; object-fit: contain; background: #080d0c; }
 .camera-empty.hidden { display: none; }
 .camera-wall-empty {
     grid-column: 1 / -1;
@@ -1615,7 +1634,7 @@ textarea:focus {
                     </div>
 
                     <div class="video-overlay top-left">
-                        <span>CAM-01</span>
+                        <span id="focusCode">NO CAMERA</span>
                         <span id="feedResolution">-</span>
                     </div>
 
@@ -1647,6 +1666,7 @@ textarea:focus {
                     </div>
                     <div class="camera-wall-header-actions">
                         <span class="live-indicator" id="camerasOnline"><span></span> 0 ONLINE</span>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="demoStartBtn">&#9654; START 4-CAMERA DEMO</button>
                         <button type="button" class="secondary-btn demo-camera-btn" id="discoverBtn">DISCOVER</button>
                         <button type="button" class="primary-btn demo-camera-btn" id="addCameraBtn">+ ADD CAMERA</button>
                     </div>
@@ -2153,6 +2173,45 @@ textarea:focus {
 
 
 <!-- ============================= -->
+<!-- CAMERA LOCATION -->
+<!-- ============================= -->
+
+<div id="locationModal" class="modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div>
+                <span class="section-kicker">CAMERA LOCATION</span>
+                <h2 id="locationTitle">Location</h2>
+            </div>
+            <button class="close-btn" id="closeLocation">&times;</button>
+        </div>
+        <div class="form-grid">
+            <label class="span-2">
+                Camera name
+                <input type="text" id="locName">
+            </label>
+            <label class="span-2">
+                Location label
+                <input type="text" id="locLabel" placeholder="Main Gate">
+            </label>
+            <label>
+                Latitude
+                <input type="number" id="locLat" step="0.000001" placeholder="12.9716">
+            </label>
+            <label>
+                Longitude
+                <input type="number" id="locLng" step="0.000001" placeholder="77.5946">
+            </label>
+        </div>
+        <div class="modal-footer">
+            <button class="secondary-btn" id="locMyPosition">USE MY LOCATION</button>
+            <button class="primary-btn" id="locSave">SAVE LOCATION</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================= -->
 <!-- ADD CAMERA -->
 <!-- ============================= -->
 
@@ -2292,7 +2351,9 @@ let seenAlertIds = null;      // null until first load, so old alerts don't soun
 let zones = [];               // polygons normalized 0-1, exactly as the backend stores them
 let zoneCounts = {};          // zone id -> live person count
 let frameSize = { w: 1280, h: 720 };
-let backendRunning = false;
+let backendRunning = false;   // the FOCUSED camera is online
+let focusedCamId = null;      // camera shown in the big view; zones + source panel act on it
+let shownFeedCamId = undefined;
 let currentSource = null;
 
 let drawingZone = false;
@@ -2459,41 +2520,58 @@ function updateStatusUI(data) {
 
     if (!data) return;
 
-    const source = data.source && data.source !== "none" ? data.source : "NONE";
-    currentSource = source;
+    // Global metrics across every camera; the focused camera's own details
+    // come from /api/cameras (updateFocusedUI).
+    systemStatus.textContent = data.cameras_online > 0 ? "ACTIVE" : "STANDBY";
+    objectCount.textContent = data.total_objects ?? 0;
+}
 
-    activeSource.textContent = String(source).toUpperCase();
+function focusedCamera() {
+    return cameras.find(c => c.id === focusedCamId) || null;
+}
+
+function updateFocusedUI() {
+    const cam = focusedCamera();
+    const live = Boolean(cam && cam.status === "online" && cam.frame_width);
+
+    document.getElementById("focusCode").textContent = cam ? `${cam.code} ${cam.name}` : "NO CAMERA";
+    activeSource.textContent = cam ? `${cam.code} ${cam.name}`.toUpperCase() : "NONE";
+    currentSource = cam ? cam.source_label : null;
     document.getElementById("feedSource").textContent =
-        `SOURCE: ${String(source).toUpperCase()}`;
-
-    const live = Boolean(data.running && data.frame_width && data.frame_height);
-    systemStatus.textContent = live ? "ACTIVE" : "STANDBY";
-
-    const objects = data.objects || {};
-    objectCount.textContent =
-        Object.values(objects).reduce((sum, n) => sum + n, 0);
+        cam ? `SOURCE: ${String(cam.source_label).toUpperCase()} | ${cam.location?.label || ""}` : "SOURCE: NONE";
 
     if (live) {
-        document.getElementById("feedResolution").textContent =
-            `${data.frame_width} × ${data.frame_height}`;
-        document.getElementById("aiFps").textContent =
-            `AI ANALYSIS • ${Math.round(data.fps || 0)} FPS`;
-
-        setFrameSize(data.frame_width, data.frame_height);
-
-        if (!backendRunning) showVideo();
+        document.getElementById("feedResolution").textContent = `${cam.frame_width} × ${cam.frame_height}`;
+        document.getElementById("aiFps").textContent = `AI ANALYSIS • ${Math.round(cam.fps || 0)} FPS`;
+        setFrameSize(cam.frame_width, cam.frame_height);
+        if (shownFeedCamId !== cam.id) showVideo();
+    } else if (!cam) {
+        videoFeed.style.display = "none";
+        videoPlaceholder.style.display = "flex";
+        shownFeedCamId = undefined;
     }
 
     backendRunning = live;
 
     document.getElementById("aiState").textContent =
-        !live ? "STANDBY"
-        : data.weapon_detector_enabled ? `ACTIVE • ${String(data.device || "cpu").toUpperCase()}`
+        !cam ? "STANDBY"
+        : !live ? camStatusLabel(cam).text
+        : cam.weapon_detector_enabled ? "ACTIVE"
         : "WEAPON MODEL OFFLINE";
 
-    zoneCounts = data.zone_counts || {};
+    zoneCounts = cam ? cam.zone_counts || {} : {};
     renderZoneList();
     drawPolygon();
+}
+
+function focusCamera(camId) {
+    if (camId === focusedCamId) return;
+    focusedCamId = camId;
+    currentPolygon = [];
+    shownFeedCamId = undefined;
+    cameraTiles.forEach((tile, id) => tile.classList.toggle("focused", id === camId));
+    updateFocusedUI();
+    loadZones();
 }
 
 
@@ -2743,15 +2821,20 @@ function setPipelineStatus(label) {
 function showVideo() {
     // Two independent MJPEG connections: the main feed and the zone-drawing backdrop.
     const bust = Date.now();
+    const path = focusedCamId ? `/video_feed/${encodeURIComponent(focusedCamId)}` : "/video_feed";
 
     stopBrowserPreview();
 
     videoPlaceholder.style.display = "none";
     videoFeed.style.display = "block";
-    videoFeed.src = `/video_feed?t=${bust}`;
+    videoFeed.src = `${path}?t=${bust}`;
 
-    if (zoneImage) zoneImage.src = `/video_feed?t=${bust + 1}`;
+    if (zoneImage && focusedCamId) {
+        const camId = focusedCamId;
+        pollSnapshots(zoneImage, camId, ZONE_FRAME_MS, () => focusedCamId === camId);
+    }
 
+    shownFeedCamId = focusedCamId;
     setPipelineStatus("BACKEND VIDEO • LIVE");
 }
 
@@ -2824,27 +2907,33 @@ async function connectSource(type, value) {
     setPipelineStatus(`CONNECTING ${labels[type]}...`);
 
     try {
-        let data;
-
-        if (type === "webcam") {
-            data = await api("/source/webcam", {
+        if (focusedCamId) {
+            // The source panel re-points the FOCUSED camera.
+            await api(`/cameras/${focusedCamId}/source`, {
+                method: "POST",
+                body: JSON.stringify({ source: type === "webcam" ? String(Number(value) || 0) : value })
+            });
+        } else if (type === "webcam") {
+            await api("/source/webcam", {
                 method: "POST",
                 body: JSON.stringify({ index: Number(value) || 0 })
             });
         } else if (type === "sample") {
-            data = await api("/source/sample", {
+            await api("/source/sample", {
                 method: "POST",
                 body: JSON.stringify({ name: value })
             });
         } else {
-            data = await api("/source/camera", {
+            await api("/source/camera", {
                 method: "POST",
                 body: JSON.stringify({ source: value })
             });
         }
 
-        updateStatusUI(data);
-        showVideo();
+        await loadCameras();
+        if (!focusedCamId) focusCamera("cam-1");
+        shownFeedCamId = undefined;
+        updateFocusedUI();
         setPipelineStatus(`${labels[type]} • LIVE`);
         showToast(`${labels[type].toLowerCase()} connected`);
 
@@ -2968,17 +3057,18 @@ document
         setPipelineStatus("UPLOADING...");
 
         try {
-            const response = await fetch(`${API}/source/upload`, {
+            const url = focusedCamId ? `${API}/cameras/${focusedCamId}/upload` : `${API}/source/upload`;
+            const response = await fetch(url, {
                 method: "POST",
                 body: form
             });
 
             if (!response.ok) throw new Error("Upload failed");
 
-            const data = await response.json();
-
-            updateStatusUI(data);
-            showVideo();
+            await loadCameras();
+            if (!focusedCamId) focusCamera("cam-1");
+            shownFeedCamId = undefined;
+            updateFocusedUI();
             setPipelineStatus("UPLOADED VIDEO • LIVE");
             showToast("Video uploaded");
 
@@ -3001,6 +3091,22 @@ document
 ========================================= */
 
 const cameraWall = document.getElementById("cameraWall");
+const MAX_WALL_CAMERAS = 4;   // backend config.MAX_CAMERAS; the backend enforces it
+const TILE_FRAME_MS = 150;    // ~6 fps per tile
+const ZONE_FRAME_MS = 1000;   // zone-drawing backdrop
+
+// Browsers allow only 6 connections per host over HTTP/1.1 and an MJPEG
+// stream holds one forever. Only the big view streams; tiles and the zone
+// backdrop poll single snapshots, so API calls never starve.
+function pollSnapshots(img, camId, intervalMs, alive) {
+    const next = () => {
+        if (!alive()) return;
+        img.src = `/api/cameras/${encodeURIComponent(camId)}/snapshot?t=${Date.now()}`;
+    };
+    img.onload = () => setTimeout(next, intervalMs);
+    img.onerror = () => setTimeout(next, 1000);
+    next();
+}
 let cameras = [];
 const cameraTiles = new Map();
 
@@ -3027,8 +3133,10 @@ function buildCameraTile(cam) {
                 <strong class="cam-code"></strong>
                 <small class="cam-source"></small>
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:6px">
+                <span class="cam-alert-badge none" title="Unacknowledged alerts"></span>
                 <span class="camera-live cam-state"></span>
+                <button class="secondary-btn camera-pin" type="button" title="Edit location">&#128205;</button>
                 <button class="secondary-btn camera-remove" type="button" title="Remove camera">&times;</button>
             </div>
         </div>
@@ -3043,13 +3151,24 @@ function buildCameraTile(cam) {
                 <span class="cam-fps"></span>
             </div>
         </div>
+        <div class="camera-stats">
+            <span class="cam-objects"></span>
+            <span class="cam-res"></span>
+        </div>
         <div class="camera-actions">
+            <button class="secondary-btn cam-upload" type="button">LOAD FOOTAGE</button>
             <button class="secondary-btn cam-toggle" type="button">STOP</button>
+            <input class="camera-file" type="file" accept="video/*">
         </div>
     `;
     const img = tile.querySelector("img");
-    img.src = `/video_feed/${encodeURIComponent(cam.id)}?t=${Date.now()}`;
+    pollSnapshots(img, cam.id, TILE_FRAME_MS, () => tile.isConnected);
 
+    tile.addEventListener("click", event => {
+        if (event.target.closest("button, input")) return;
+        focusCamera(cam.id);
+    });
+    tile.querySelector(".camera-pin").addEventListener("click", () => openLocationEditor(cam.id));
     tile.querySelector(".camera-remove").addEventListener("click", async () => {
         if (!confirm(`Remove ${cam.code} ${cam.name}?`)) return;
         try {
@@ -3065,11 +3184,28 @@ function buildCameraTile(cam) {
         const action = current && current.status !== "stopped" ? "stop" : "start";
         try {
             await api(`/cameras/${cam.id}/${action}`, { method: "POST" });
-            if (action === "start") img.src = `/video_feed/${encodeURIComponent(cam.id)}?t=${Date.now()}`;
             loadCameras();
         } catch (error) {
             showToast(`${action} failed: ${error.message}`);
         }
+    });
+    const file = tile.querySelector(".camera-file");
+    tile.querySelector(".cam-upload").addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+        if (!file.files[0]) return;
+        const form = new FormData();
+        form.append("file", file.files[0]);
+        showToast(`Uploading to ${cam.code}...`);
+        try {
+            const response = await fetch(`${API}/cameras/${cam.id}/upload`, { method: "POST", body: form });
+            if (!response.ok) throw new Error((await response.json()).detail || "Upload failed");
+            if (cam.id === focusedCamId) shownFeedCamId = undefined;
+            showToast(`${cam.code} now plays ${file.files[0].name}`);
+            loadCameras();
+        } catch (error) {
+            showToast(error.message);
+        }
+        file.value = "";
     });
     return tile;
 }
@@ -3084,6 +3220,20 @@ function updateCameraTile(tile, cam) {
     tile.querySelector(".cam-place").textContent = cam.location?.label || cam.name;
     tile.querySelector(".cam-fps").textContent = cam.status === "online" ? `${cam.fps} FPS` : "";
     tile.querySelector(".cam-toggle").textContent = cam.status === "stopped" ? "START" : "STOP";
+
+    const counts = Object.entries(cam.object_counts || {})
+        .sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([cls, n]) => `${n} ${cls}`).join(" · ");
+    tile.querySelector(".cam-objects").textContent =
+        cam.status === "online" ? `${cam.object_count} OBJ${counts ? " · " + counts : ""}` : "";
+    tile.querySelector(".cam-res").textContent = cam.status === "online" && cam.resolution ? cam.resolution : "";
+
+    const badge = tile.querySelector(".cam-alert-badge");
+    badge.textContent = cam.active_alerts;
+    badge.className = `cam-alert-badge${cam.critical_alerts ? " critical" : ""}${cam.active_alerts ? "" : " none"}`;
+    tile.classList.toggle("critical", cam.critical_alerts > 0);
+    tile.classList.toggle("focused", cam.id === focusedCamId);
+
     const empty = tile.querySelector(".cam-empty");
     empty.classList.toggle("hidden", cam.status === "online");
     tile.querySelector(".cam-empty-text").textContent = state.text;
@@ -3092,6 +3242,79 @@ function updateCameraTile(tile, cam) {
         cam.status === "offline" ? "Still retrying every 30s" :
         cam.status === "stopped" ? "Press START" : "";
 }
+
+function buildWaitingTile() {
+    const tile = document.createElement("article");
+    tile.className = "camera-tile waiting";
+    tile.innerHTML = `
+        <div class="camera-tile-head">
+            <div class="camera-title">
+                <strong>NEXT CAMERA</strong>
+                <small>WAITING</small>
+            </div>
+            <span class="camera-live offline">WAITING</span>
+        </div>
+        <div class="camera-feed">
+            <div class="camera-empty">
+                WAITING FOR CONNECTION<br>
+                <small>Phone IP (DroidCam), stream URL or webcam index</small>
+            </div>
+        </div>
+        <div class="camera-controls">
+            <input class="wait-source" type="text" placeholder="192.168.1.20 / rtsp://... / 0" autocomplete="off">
+            <button class="primary-btn wait-connect" type="button">CONNECT</button>
+        </div>
+        <div class="camera-actions">
+            <button class="secondary-btn wait-upload" type="button">LOAD FOOTAGE</button>
+            <input class="camera-file" type="file" accept="video/*">
+        </div>
+    `;
+    const input = tile.querySelector(".wait-source");
+    const connect = async () => {
+        let source = input.value.trim();
+        if (!source) {
+            showToast("Enter a phone IP, stream URL or webcam index");
+            return;
+        }
+        if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(source)) {
+            // A bare phone IP means DroidCam (port 4747 unless given).
+            source = `http://${source.includes(":") ? source : source + ":4747"}/video`;
+        }
+        try {
+            const cam = await api("/cameras", { method: "POST", body: JSON.stringify({ name: "", source }) });
+            input.value = "";
+            showToast(`${cam.code} connecting...`);
+            await loadCameras();
+            focusCamera(cam.id);
+        } catch (error) {
+            showToast(error.message);
+        }
+    };
+    tile.querySelector(".wait-connect").addEventListener("click", connect);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
+    const file = tile.querySelector(".camera-file");
+    tile.querySelector(".wait-upload").addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+        if (!file.files[0]) return;
+        const form = new FormData();
+        form.append("file", file.files[0]);
+        showToast("Uploading footage...");
+        try {
+            const response = await fetch(`${API}/cameras/upload`, { method: "POST", body: form });
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.detail || "Upload failed");
+            showToast(`${body.code} plays ${file.files[0].name}`);
+            await loadCameras();
+            focusCamera(body.id);
+        } catch (error) {
+            showToast(error.message);
+        }
+        file.value = "";
+    });
+    return tile;
+}
+
+let waitingTile = null;
 
 function renderCameraWall() {
     const ids = new Set(cameras.map(c => c.id));
@@ -3110,16 +3333,15 @@ function renderCameraWall() {
         cameraWall.appendChild(tile);  // keeps tiles in camera order
         updateCameraTile(tile, cam);
     });
-    let empty = cameraWall.querySelector(".camera-wall-empty");
-    if (!cameras.length && !empty) {
-        empty = document.createElement("div");
-        empty.className = "camera-wall-empty";
-        empty.textContent = "No cameras yet. + ADD CAMERA connects a DroidCam phone, the laptop webcam or a clip.";
-        cameraWall.appendChild(empty);
-    } else if (cameras.length && empty) {
-        empty.remove();
+    // The teammate's auto-expanding wall: one waiting slot while below the limit.
+    if (cameras.length < MAX_WALL_CAMERAS) {
+        waitingTile = waitingTile || buildWaitingTile();
+        cameraWall.appendChild(waitingTile);
+    } else if (waitingTile) {
+        waitingTile.remove();
     }
-    cameraWall.className = `camera-wall count-${Math.max(1, cameras.length)}`;
+    const tiles = cameras.length + (cameras.length < MAX_WALL_CAMERAS ? 1 : 0);
+    cameraWall.className = `camera-wall count-${Math.max(1, tiles)}`;
     const online = cameras.filter(c => c.status === "online").length;
     document.getElementById("camerasOnline").innerHTML = `<span></span> ${online}/${cameras.length} ONLINE`;
 }
@@ -3127,8 +3349,16 @@ function renderCameraWall() {
 async function loadCameras() {
     try {
         cameras = await api("/cameras");
-        renderCameraWall();
-    } catch {}
+    } catch {
+        return;
+    }
+    if (!cameras.some(c => c.id === focusedCamId)) {
+        const next = cameras.find(c => c.id === "cam-1") || cameras[0];
+        focusedCamId = null;
+        if (next) focusCamera(next.id);
+    }
+    renderCameraWall();
+    updateFocusedUI();
 }
 
 
@@ -3275,6 +3505,88 @@ document.getElementById("camSaveBtn").addEventListener("click", async () => {
         loadCameras();
     } catch (error) {
         showToast(error.message);
+    }
+});
+
+
+/* =========================================
+   4-CAMERA DEMO (real clips, real analysis)
+========================================= */
+
+document.getElementById("demoStartBtn").addEventListener("click", async () => {
+    const button = document.getElementById("demoStartBtn");
+    button.disabled = true;
+    showToast("Starting demo cameras...");
+    try {
+        const result = await api("/cameras/demo", { method: "POST" });
+        const added = result.added.map(c => c.name).join(", ");
+        showToast(added ? `Demo: ${added}` : "Demo cameras already running (or no free slots)");
+        await loadCameras();
+    } catch (error) {
+        showToast(`Demo failed: ${error.message}`);
+    }
+    button.disabled = false;
+});
+
+
+/* =========================================
+   CAMERA LOCATION EDITOR
+========================================= */
+
+const locationModal = document.getElementById("locationModal");
+let locationCamId = null;
+
+function openLocationEditor(camId) {
+    const cam = cameras.find(c => c.id === camId);
+    if (!cam) return;
+    locationCamId = camId;
+    document.getElementById("locationTitle").textContent = `${cam.code} ${cam.name}`;
+    document.getElementById("locName").value = cam.name;
+    document.getElementById("locLabel").value = cam.location?.label || "";
+    document.getElementById("locLat").value = cam.location?.lat ?? "";
+    document.getElementById("locLng").value = cam.location?.lng ?? "";
+    locationModal.classList.add("show");
+}
+
+document.getElementById("closeLocation").addEventListener("click", () => locationModal.classList.remove("show"));
+
+document.getElementById("locMyPosition").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+        showToast("Location is not available in this browser");
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            document.getElementById("locLat").value = pos.coords.latitude.toFixed(6);
+            document.getElementById("locLng").value = pos.coords.longitude.toFixed(6);
+        },
+        () => showToast("Could not read your location"),
+        { timeout: 8000 }
+    );
+});
+
+document.getElementById("locSave").addEventListener("click", async () => {
+    const num = id => {
+        const v = document.getElementById(id).value.trim();
+        return v === "" ? null : Number(v);
+    };
+    try {
+        await api(`/cameras/${locationCamId}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+                name: document.getElementById("locName").value.trim() || null,
+                location: {
+                    label: document.getElementById("locLabel").value.trim(),
+                    lat: num("locLat"),
+                    lng: num("locLng")
+                }
+            })
+        });
+        locationModal.classList.remove("show");
+        showToast("Location saved");
+        loadCameras();
+    } catch (error) {
+        showToast(`Location not saved: ${error.message}`);
     }
 });
 
@@ -3515,8 +3827,12 @@ function renderZoneList() {
     });
 }
 
+function zonesPath() {
+    return focusedCamId ? `/cameras/${focusedCamId}/zones` : "/zones";
+}
+
 async function saveZones() {
-    await api("/zones", {
+    await api(zonesPath(), {
         method: "POST",
         body: JSON.stringify(zones)
     });
@@ -3613,7 +3929,7 @@ document.getElementById("saveZone").addEventListener("click", async () => {
 
 async function loadZones() {
     try {
-        const remoteZones = await api("/zones");
+        const remoteZones = await api(zonesPath());
         if (Array.isArray(remoteZones)) zones = remoteZones;
     } catch {}
 
@@ -3946,7 +4262,7 @@ setInterval(loadStatus, 1000);
 
 setInterval(loadAlerts, 2000);
 
-setInterval(loadCameras, 2000);
+setInterval(loadCameras, 1000);
 
 setInterval(() => {
     loadAudit();

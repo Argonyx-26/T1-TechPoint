@@ -93,6 +93,19 @@ def camera_video_feed(cam_id: str):
     return _stream(cam_id)
 
 
+@app.get("/api/cameras/{cam_id}/snapshot")
+def camera_snapshot(cam_id: str):
+    """Latest annotated frame as one JPEG. The camera wall polls this instead
+    of holding an MJPEG stream per tile: browsers allow only 6 connections
+    per host over HTTP/1.1, and 4 tile streams + the big view + the zone
+    backdrop would starve every API call."""
+    _camera_or_404(cam_id)
+    jpeg = app_state.latest_jpeg(cam_id)
+    if jpeg is None:
+        raise HTTPException(status_code=503, detail="No frame yet")
+    return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/status")
 def get_status():
     return app_state.status()
@@ -391,6 +404,67 @@ def stop_camera(cam_id: str):
     camera = _camera_or_404(cam_id)
     camera.stop()
     audit("CAMERA_STOPPED", f"{camera.code} {camera.name}", actor="operator", camera_id=cam_id)
+    return camera.to_dict()
+
+
+class SourceIn(BaseModel):
+    source: str
+
+
+def _wait_online(camera: Camera, source) -> dict:
+    deadline = time.time() + config.SOURCE_CONNECT_TIMEOUT_S
+    while time.time() < deadline and camera.status == STATUS_CONNECTING:
+        time.sleep(0.1)
+    if camera.status != STATUS_ONLINE:
+        camera.stop()
+        raise HTTPException(status_code=400, detail=f"Could not open video source: {source}")
+    return camera.to_dict()
+
+
+@app.post("/api/cameras/{cam_id}/source")
+def set_camera_source(cam_id: str, body: SourceIn):
+    """Re-point one camera (the dashboard's focused camera) at a new source."""
+    _camera_or_404(cam_id)
+    try:
+        camera = app_state.manager.set_source(cam_id, body.source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _wait_online(camera, body.source)
+
+
+@app.post("/api/cameras/demo")
+def start_camera_demo():
+    """Fills the free camera slots with the demo cameras (real footage, real
+    analysis): Main Gate, Lobby, Parking, Corridor B. Webcam 0 becomes Main
+    Gate when one is attached."""
+    existing = {c.name for c in app_state.manager.list()}
+    added, skipped = [], []
+    for preset in config.DEMO_CAMERAS:
+        if preset["name"] in existing:
+            skipped.append(preset["name"])
+            continue
+        if len(app_state.manager.cameras) >= config.MAX_CAMERAS:
+            skipped.append(preset["name"])
+            continue
+        source = preset["source"]
+        if preset.get("webcam_first") and test_source(0, timeout_s=2.0).get("ok"):
+            source = "0"
+        camera = app_state.manager.add(preset["name"], source, preset["location"])
+        added.append(camera.to_dict())
+    audit("DEMO_STARTED", f"added {', '.join(c['name'] for c in added) or 'nothing'}"
+                          + (f"; skipped {', '.join(skipped)}" if skipped else ""), actor="operator")
+    return {"added": added, "skipped": skipped}
+
+
+@app.post("/api/cameras/upload")
+async def create_camera_from_upload(file: UploadFile = File(...), name: str = "", location: str = ""):
+    """LOAD FOOTAGE on an empty slot: create a camera that plays the file."""
+    dest = _save_upload(file)
+    try:
+        camera = app_state.manager.add(name or Path(file.filename or "footage").stem, str(dest),
+                                       {"label": location} if location else None)
+    except (CameraLimitError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return camera.to_dict()
 
 

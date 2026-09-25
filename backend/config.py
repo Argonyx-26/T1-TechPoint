@@ -122,7 +122,14 @@ CAMERAS_FILE = DATA_DIR / "cameras.json"
 STREAM_TIMEOUT_S = 5.0         # network streams: open/read timeout before a reconnect
 CAMERA_TEST_TIMEOUT_S = 3.0    # "TEST" in the add-camera dialog must grab a frame within this
 DISCOVER_TIMEOUT_S = 1.0       # per-host connect/read timeout when scanning the /24 for phones
-SOURCE_CONNECT_TIMEOUT_S = 5.0  # single-source flow: wait this long for a first frame before reporting failure
+SOURCE_CONNECT_TIMEOUT_S = 5.0
+# "START 4-CAMERA DEMO": sample clips (webcam 0 replaces the first when present).
+DEMO_CAMERAS = [
+    {"name": "Main Gate", "source": "vtest.avi", "location": {"label": "Main Gate"}, "webcam_first": True},
+    {"name": "Lobby", "source": "confusers.mp4", "location": {"label": "Lobby"}},
+    {"name": "Parking", "source": "vtest.avi", "location": {"label": "Parking"}},
+    {"name": "Corridor B", "source": "confusers.mp4", "location": {"label": "Corridor B"}},
+]  # single-source flow: wait this long for a first frame before reporting failure
 
 STREAM_JPEG_QUALITY = 80
 STREAM_MAX_FPS = int(os.environ.get("ARGONYX_STREAM_MAX_FPS", "60"))

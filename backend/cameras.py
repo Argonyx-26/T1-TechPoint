@@ -420,6 +420,8 @@ class Camera:
             "object_count": sum(counts.values()),
             "object_counts": counts,
             "active_alerts": self.pipeline.alert_manager.active_count(camera_id=self.id),
+            "critical_alerts": self.pipeline.alert_manager.active_count(camera_id=self.id, band="CRITICAL"),
+            "zone_counts": dict(self.pipeline.rule_engine.zone_counts) if self.status == STATUS_ONLINE else {},
             "location": self.location.to_dict(),
             "weapon_detector_enabled": self.shared.weapon.enabled,
         }
