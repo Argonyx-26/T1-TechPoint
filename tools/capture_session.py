@@ -36,6 +36,8 @@ def main():
     parser.add_argument("--out-dir", default="data/captures")
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--tag", choices=["phone", "other", "weapon"], default=None,
+                        help="What you start out holding (default: weapon for weapons_* sessions, else phone)")
     parser.add_argument("--countdown", type=int, default=5, help="Seconds of preview before recording starts")
     args = parser.parse_args()
 
@@ -59,7 +61,7 @@ def main():
         raise SystemExit("Webcam opened but returned no frame")
     h, w = frame.shape[:2]
 
-    tag = "weapon" if args.session.startswith("weapon") else "phone"
+    tag = args.tag or ("weapon" if args.session.startswith("weapon") else "phone")
     window = f"capture: {args.session}"
 
     # Countdown so you can get into position; nothing is recorded yet.
