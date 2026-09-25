@@ -170,6 +170,51 @@ class AlertManager:
         self._store(alert)
         return alert
 
+    BAND_SCORES = {"LOW": 30, "MEDIUM": 50, "HIGH": 70, "CRITICAL": 95}
+
+    def ingest_event(self, rule: str, message: str, timestamp: float, camera=None, band: Optional[str] = None,
+                     bbox=None, frame=None, track_ids: Optional[List[int]] = None,
+                     dedupe_key: Optional[Tuple] = None, zone_id: Optional[str] = None,
+                     zone_name: Optional[str] = None) -> Optional[Alert]:
+        """Alerts raised outside the per-frame rules engine (blind-spot
+        tracking, behaviour detection). `band` pins the severity; otherwise
+        it is scored like any rule (weight + co-occurrence on this camera).
+        Cooldown per `dedupe_key` (default: camera + rule)."""
+        cam_id = camera.id if camera is not None else None
+        key = dedupe_key or (cam_id, rule)
+        if self._on_cooldown(key, timestamp):
+            return None
+        self._last_fired[key] = timestamp
+        siblings = self._co_occurring_camera_rules(cam_id, timestamp)
+        if band:
+            score = self.BAND_SCORES[band]
+        else:
+            score, band = severity.score_alert(rule, siblings)
+        alert = Alert(
+            id=next(_id_counter),
+            rule=rule,
+            message=self._placed(message, camera),
+            score=score,
+            band=band,
+            timestamp=timestamp,
+            track_ids=list(track_ids or []),
+            zone_id=zone_id,
+            zone_name=zone_name,
+            bbox=bbox,
+            **self._camera_fields(camera),
+        )
+        self._save_evidence(alert, frame)
+        self._store(alert)
+        return alert
+
+    def _co_occurring_camera_rules(self, camera_id, timestamp: float) -> List[str]:
+        """Rules fired on the same camera within the co-occurrence window."""
+        if camera_id is None:
+            return []
+        window_start = timestamp - config.CO_OCCURRENCE_WINDOW_SECONDS
+        with self._lock:
+            return [a.rule for a in self._alerts if a.camera_id == camera_id and a.timestamp >= window_start]
+
     def _save_evidence(self, alert: Alert, frame):
         if frame is None:
             return

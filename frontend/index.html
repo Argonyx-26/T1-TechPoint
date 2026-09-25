@@ -897,6 +897,26 @@ textarea:focus {
 .sighting small { color: var(--text-muted); font-family: var(--font-mono); font-size: 9px; }
 .reid-badge { font-family: var(--font-mono); font-size: 9px; color: #9fe3ee; }
 
+/* Movement Log */
+.moves { display: flex; flex-direction: column; gap: 8px; padding: 0 22px 22px; }
+.move-row { display: grid; grid-template-columns: 44px 70px 1fr; gap: 10px; align-items: center; padding: 6px 8px;
+    background: var(--noir-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.move-row:hover, .move-row.selected { border-color: #5fd3e6; }
+.move-row img { width: 44px; height: 56px; object-fit: cover; border-radius: 4px; background: #080d0c; }
+.move-id { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #9fe3ee; }
+.move-id small { display: block; font-weight: 400; color: var(--text-muted); font-size: 9px; }
+.timeline { position: relative; height: 34px; background: rgba(17, 26, 25, .6); border-radius: 4px; overflow: hidden; }
+.tl-seg { position: absolute; top: 4px; height: 14px; border-radius: 3px; background: #5fd3e6; opacity: .85; min-width: 3px; }
+.tl-seg.open { background: linear-gradient(90deg, #5fd3e6, #9fe3ee); }
+.tl-seg span { position: absolute; left: 3px; top: 0; font: 700 8px/14px var(--font-mono); color: #111a19; white-space: nowrap; }
+.tl-gap { position: absolute; top: 22px; height: 2px; background: var(--wasabi-dim); }
+.tl-gap.long_gap { background: #e8913a; }
+.tl-gap.missing { background: #ef5a3a; }
+.tl-gap-label { position: absolute; top: 18px; font: 700 8px var(--font-mono); color: var(--text-muted); transform: translateX(-50%); white-space: nowrap; }
+.tl-gap-label.long_gap { color: #e8913a; }
+.tl-gap-label.missing { color: #ef5a3a; }
+.tl-axis { display: flex; justify-content: space-between; font: 8px var(--font-mono); color: var(--wasabi-dim); padding: 0 22px 6px; }
+
 /* add-camera dialog */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 18px 22px 0; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
@@ -1791,6 +1811,25 @@ textarea:focus {
                     <div class="street-map hidden" id="streetMap"></div>
                 </div>
                 <div class="links-list" id="linksList"></div>
+            </section>
+
+            <!-- MOVEMENT LOG -->
+            <section class="panel moves-panel" id="movesPanel">
+                <div class="panel-header">
+                    <div>
+                        <span class="section-kicker">BLIND-SPOT TRACKING</span>
+                        <h2>Movement Log</h2>
+                    </div>
+                    <div class="map-toolbar">
+                        <select id="movesMinutes" title="Window">
+                            <option value="10">10 min</option>
+                            <option value="30" selected>30 min</option>
+                        </select>
+                        <button type="button" class="secondary-btn demo-camera-btn" id="movesExport">EXPORT CSV</button>
+                    </div>
+                </div>
+                <div class="tl-axis"><span id="tlStart">-</span><span id="tlEnd">now</span></div>
+                <div class="moves" id="movesList"><div class="ask-empty">No subjects tracked yet.</div></div>
             </section>
 
             <!-- ASK VIGIL -->
@@ -4423,6 +4462,99 @@ document.getElementById("backtrackBtn").addEventListener("click", async () => {
 
 
 /* =========================================
+   MOVEMENT LOG
+   Each subject: camera segments (time in ->
+   time out) and the blind-spot gaps between
+   them, orange when too long, red when missing.
+========================================= */
+
+let selectedMover = null;
+
+async function loadMovements() {
+    const minutes = Number(document.getElementById("movesMinutes").value);
+    let subjects;
+    try {
+        subjects = await api(`/movements?minutes=${minutes}`);
+    } catch {
+        return;
+    }
+    const list = document.getElementById("movesList");
+    const now = Date.now() / 1000;
+    const start = now - minutes * 60;
+    document.getElementById("tlStart").textContent = hhmmss(start);
+    document.getElementById("tlEnd").textContent = hhmmss(now);
+    const x = t => `${Math.max(0, Math.min(100, (t - start) / (now - start) * 100))}%`;
+    const width = (a, b) => `${Math.max(0.4, ((b - a) / (now - start)) * 100)}%`;
+
+    const people = subjects.filter(s => s.segments.length).slice(0, 25);
+    if (!people.length) {
+        list.innerHTML = `<div class="ask-empty">No subjects tracked yet. People are logged once cameras are running.</div>`;
+        return;
+    }
+    list.innerHTML = people.map(subject => {
+        const segs = subject.segments.map(seg => {
+            const end = seg.time_out ?? now;
+            return `<div class="tl-seg${seg.time_out ? "" : " open"}" style="left:${x(seg.time_in)};width:${width(seg.time_in, end)}"
+                        title="${escapeHTML(seg.camera.code)} in ${hhmmss(seg.time_in)} out ${seg.time_out ? hhmmss(seg.time_out) : "now"}"><span>${escapeHTML(seg.camera.code)}</span></div>`;
+        }).join("");
+        const gaps = subject.segments.map((seg, i) => {
+            if (!seg.time_out) return "";
+            const next = subject.segments[i + 1];
+            const gapEnd = next ? next.time_in : (seg.status === "missing" ? now : null);
+            if (gapEnd == null) return "";
+            const cls = seg.status === "long_gap" || seg.status === "missing" ? seg.status : "";
+            const label = seg.status === "missing" ? `MISSING ${fmtGap(now - seg.time_out)}` :
+                `${fmtGap(gapEnd - seg.time_out)}${seg.expected_s ? ` / ~${fmtGap(seg.expected_s)}` : ""}`;
+            return `<div class="tl-gap ${cls}" style="left:${x(seg.time_out)};width:${width(seg.time_out, gapEnd)}"></div>
+                    <div class="tl-gap-label ${cls}" style="left:calc(${x(seg.time_out)} + ${((gapEnd - seg.time_out) / (now - start)) * 50}%)">${escapeHTML(label)}</div>`;
+        }).join("");
+        const last = subject.segments[subject.segments.length - 1];
+        return `<div class="move-row${selectedMover === subject.global_id ? " selected" : ""}" data-gid="${escapeHTML(subject.global_id)}">
+            ${subject.thumb_url ? `<img src="${subject.thumb_url}" alt="">` : "<span></span>"}
+            <div class="move-id">#${escapeHTML(subject.global_id)}<small>${escapeHTML(last.camera.code)} ${escapeHTML(last.status.replace("_", " "))}</small></div>
+            <div class="timeline">${segs}${gaps}</div>
+        </div>`;
+    }).join("");
+    list.querySelectorAll(".move-row").forEach(row => row.addEventListener("click", () => {
+        const subject = people.find(p => p.global_id === row.dataset.gid);
+        selectedMover = subject.global_id;
+        list.querySelectorAll(".move-row").forEach(r => r.classList.toggle("selected", r === row));
+        showMoverOnMap(subject);
+    }));
+}
+
+function fmtGap(seconds) {
+    seconds = Math.round(seconds);
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+// The subject's route on the map, each gap labelled on its link line.
+function showMoverOnMap(subject) {
+    const colors = { long_gap: "#e8913a", missing: "#ef5a3a" };
+    routeOverlay = subject.segments.map((seg, i) => {
+        const prev = subject.segments[i - 1];
+        return {
+            cam_id: seg.camera_id,
+            time: hhmmss(seg.time_in),
+            label: prev && prev.gap_to_next_s != null ? `gap ${fmtGap(prev.gap_to_next_s)}` : "",
+            color: prev ? colors[prev.status] : undefined
+        };
+    });
+    lastPlanHTML = "";
+    renderMap();
+    document.getElementById("siteMapPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+document.getElementById("movesMinutes").addEventListener("change", loadMovements);
+document.getElementById("movesExport").addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.href = `${API}/movements/export?format=csv&minutes=${document.getElementById("movesMinutes").value}`;
+    link.click();
+});
+
+
+/* =========================================
    4-CAMERA DEMO (real clips, real analysis)
 ========================================= */
 
@@ -5216,6 +5348,8 @@ setInterval(() => {
 setInterval(loadLinks, 5000);
 
 setInterval(pollFollow, 1000);
+
+setInterval(loadMovements, 2000);
 
 setInterval(refreshAskStats, 5000);
 

@@ -232,6 +232,21 @@ def backtrack_alert(alert_id: int):
     return {"global_id": gid, "sightings": app_state.search.route(gid, until=alert.timestamp)}
 
 
+# ---------- movement log (blind spots between cameras) ----------
+@app.get("/api/movements")
+def movements(minutes: float = 30):
+    return app_state.movements.log(minutes)
+
+
+@app.get("/api/movements/export")
+def export_movements(format: str = "csv", minutes: float = 30):
+    if format != "csv":
+        raise HTTPException(status_code=400, detail="format must be csv")
+    audit("MOVEMENTS_EXPORTED", f"last {minutes:g} min as CSV", actor="operator")
+    return Response(app_state.movements.export_csv(minutes), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="vigil-movements-{time.strftime("%Y%m%d-%H%M%S")}.csv"'})
+
+
 # ---------- zones (per camera; /api/zones = camera 1) ----------
 class ZoneIn(BaseModel):
     id: str

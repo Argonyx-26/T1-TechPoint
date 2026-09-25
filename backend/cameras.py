@@ -397,6 +397,14 @@ class Camera:
         with self._lock:
             return self._latest_jpeg
 
+    def latest_frame(self):
+        """Latest annotated frame as an image (evidence for alerts raised
+        outside the pipeline, e.g. blind-spot tracking)."""
+        jpeg = self.latest_jpeg()
+        if jpeg is None:
+            return None
+        return cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+
     def frame_size(self):
         with self._lock:
             h, w = self._frame_shape

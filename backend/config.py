@@ -83,6 +83,8 @@ SEVERITY_WEIGHTS = {
     "CROWD_SURGE": 70,       # sudden rise -> HIGH
     "CROWD_THRESHOLD": 55,   # absolute count over the zone limit -> MEDIUM
     "WRONG_DIRECTION": 45,
+    "BLIND_SPOT_GAP": 50,     # MEDIUM (HIGH when the subject was in a serious alert)
+    "SUBJECT_MISSING": 50,
     "LOITERING": 30,
 }
 CO_OCCURRENCE_BONUS = 10   # added per extra distinct alert type in same zone/window
@@ -167,6 +169,11 @@ REID_MARGIN = 0.03             # the best candidate must beat the runner-up (ano
 REID_WINDOW_S = 300.0          # only match people who left within the last 5 minutes
 REID_ACTIVE_S = 1.0            # a subject visible elsewhere within this is not a candidate
 REID_MIN_GAP_S = 0.5
+
+# --- Blind-spot tracking between linked cameras ---------------------------------
+GAP_ALERT_S = 60.0             # gap alert when longer than max(2 x link walking time, this)
+MISSING_ALERT_S = 120.0        # left a linked camera and not seen anywhere for this long
+ESCALATE_WINDOW_S = 900.0      # HIGH if the subject was in a HIGH/CRITICAL alert this recently
 
 STREAM_JPEG_QUALITY = 80
 STREAM_MAX_FPS = int(os.environ.get("ARGONYX_STREAM_MAX_FPS", "60"))
