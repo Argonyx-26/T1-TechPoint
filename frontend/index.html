@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vigil - Threat Detection &amp; Situational Awareness</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235b8cff' d='M12 1 3 5v6c0 5.2 3.4 9.9 9 11 5.6-1.1 9-5.8 9-11V5l-9-4z'/%3E%3Ccircle cx='12' cy='12' r='3.4' fill='%230a0c12'/%3E%3Ccircle cx='12' cy='12' r='1.6' fill='%235b8cff'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26">
+          <path fill="currentColor" d="M12 1 3 5v6c0 5.2 3.4 9.9 9 11 5.6-1.1 9-5.8 9-11V5l-9-4z" opacity="0.95"/>
+          <circle cx="12" cy="12" r="3.4" fill="#0a0c12"/>
+          <circle cx="12" cy="12" r="1.6" fill="currentColor"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <span class="brand-name">VIGIL</span>
+        <span class="brand-sub">Threat Detection &amp; Situational Awareness</span>
+      </div>
+    </div>
+    <div class="stat-strip" id="statStrip">
+      <div class="stat-tile"><span class="stat-label">Source</span><span class="stat-value" id="statSource">-</span></div>
+      <div class="stat-tile"><span class="stat-label">FPS</span><span class="stat-value" id="statFps">-</span></div>
+      <div class="stat-tile"><span class="stat-label">Latency</span><span class="stat-value" id="statLatency">-</span></div>
+      <div class="stat-tile"><span class="stat-label">Device</span><span class="stat-value" id="statDevice">-</span></div>
+      <div class="stat-tile"><span class="stat-label">Uptime</span><span class="stat-value" id="statUptime">-</span></div>
+      <div class="stat-tile"><span class="stat-label">Alerts</span><span class="stat-value" id="statAlerts">0</span></div>
+    </div>
+  </header>
+
+  <div class="status-banner" id="weaponBanner" hidden>
+    <span class="status-banner-dot"></span>
+    <span id="weaponBannerText"></span>
+  </div>
+
+  <div class="action-panel" id="actionPanel" hidden>
+    <div class="action-panel-head">
+      <span class="action-panel-title"><span id="actionPanelRule"></span> - Recommended Response</span>
+      <button class="btn ghost small" id="actionPanelDismiss">Acknowledge</button>
+    </div>
+    <ul class="action-panel-list" id="actionPanelList"></ul>
+  </div>
+
+  <div class="objects-bar" id="objectsBar" hidden>
+    <span class="objects-label">Live detections</span>
+    <span id="objectsList" class="objects-list"></span>
+  </div>
+
+  <main class="layout">
+    <section class="video-panel">
+      <div class="video-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-group-label">Source</span>
+          <button id="btnWebcam" class="btn">Webcam</button>
+          <input type="text" id="cameraSourceInput" class="btn camera-input" placeholder="Camera index or DroidCam URL" />
+          <button id="btnConnectCamera" class="btn">Connect</button>
+          <label class="btn file-btn">
+            Upload
+            <input type="file" id="uploadInput" accept="video/*" hidden />
+          </label>
+          <select id="sampleSelect" class="btn select-btn">
+            <option value="">Sample clips...</option>
+          </select>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-group-label">Session</span>
+          <button id="btnRecordScreen" class="btn">
+            <span class="rec-dot" id="recDot" hidden></span>
+            <span id="btnRecordScreenLabel">Record Screen</span>
+          </button>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-group-label">Zones</span>
+          <button id="btnDrawZone" class="btn accent">+ Draw Zone</button>
+          <button id="btnFinishZone" class="btn" hidden>Finish Polygon</button>
+          <button id="btnCancelZone" class="btn ghost" hidden>Cancel</button>
+        </div>
+      </div>
+
+      <div class="video-wrap" id="videoWrap">
+        <img id="feed" src="/video_feed" alt="live analyzed feed" />
+        <canvas id="overlay"></canvas>
+        <div class="live-badge" id="liveBadge" hidden><span class="live-dot"></span>LIVE</div>
+        <div class="video-empty" id="videoEmpty">
+          <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
+            <path fill="currentColor" d="M12 1 3 5v6c0 5.2 3.4 9.9 9 11 5.6-1.1 9-5.8 9-11V5l-9-4z" opacity="0.5"/>
+            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          </svg>
+          <p>No active source</p>
+          <span>Connect a webcam, DroidCam URL, upload a clip, or pick a sample above to begin monitoring.</span>
+        </div>
+      </div>
+
+      <div class="zone-list" id="zoneList"></div>
+    </section>
+
+    <aside class="alert-sidebar">
+      <div class="sidebar-header">
+        <h2>Ranked Alerts</h2>
+        <span class="alert-count" id="alertCount">0</span>
+      </div>
+      <div class="alert-list" id="alertList">
+        <div class="empty-state">No alerts yet. Anomalies will appear here, ranked by severity.</div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal">
+      <button class="modal-close" id="modalClose">×</button>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="zoneModalBackdrop" hidden>
+    <div class="modal">
+      <button class="modal-close" id="zoneModalClose">×</button>
+      <div class="modal-body">
+        <h3>Configure Zone</h3>
+        <label>Name<input type="text" id="zoneName" placeholder="e.g. Main Entrance" /></label>
+        <label class="checkbox-row"><input type="checkbox" id="zoneRestricted" /> Restricted (no-go area)</label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="zoneCrowdEnabled" /> Crowd-surge threshold
+          <input type="number" id="zoneCrowdThreshold" min="1" value="5" class="inline-num" />
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="zoneLoiterEnabled" /> Loiter limit (seconds)
+          <input type="number" id="zoneLoiterSeconds" min="1" value="8" class="inline-num" />
+        </label>
+        <p class="hint">To flag wrong-direction movement, draw the zone over a lane/doorway, then click two points on the feed after saving to set the allowed direction (optional - skip for now).</p>
+        <div class="modal-actions">
+          <button class="btn accent" id="zoneSaveBtn">Save Zone</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

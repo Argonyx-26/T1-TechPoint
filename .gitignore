@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# runtime artifacts
+evidence/*.jpg
+uploads/*
+!uploads/.gitkeep
+zones.json
+
+# model weights (large; fetch/train separately)
+*.pt
+!models/.gitkeep
+
+# sample footage (large; not committed)
+sample_data/*
+!sample_data/.gitkeep
+
+.DS_Store
+
+# capture sessions + fine-tune frames (large, local only)
+data/
