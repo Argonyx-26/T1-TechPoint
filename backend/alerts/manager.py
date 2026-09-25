@@ -3,6 +3,7 @@ cooldown-gated, ranked, evidence-backed feed for the dashboard.
 """
 import itertools
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -38,10 +39,15 @@ class Alert:
         return {
             "id": self.id,
             "rule": self.rule,
+            "type": self.rule.replace("_", " ").title(),
             "message": self.message,
+            "description": self.message,
             "score": self.score,
             "band": self.band,
-            "timestamp": self.timestamp,
+            "severity": self.band.lower(),
+            # Wall-clock "HH:MM:SS" for display; created_at is the epoch value.
+            "timestamp": time.strftime("%H:%M:%S", time.localtime(self.timestamp)),
+            "created_at": self.timestamp,
             "track_ids": self.track_ids,
             "zone_id": self.zone_id,
             "zone_name": self.zone_name,
@@ -158,6 +164,11 @@ class AlertManager:
             removed = len(self._alerts)
             self._alerts = []
             return removed
+
+    def active_count(self) -> int:
+        """Alerts currently in the feed (cleared ones excluded)."""
+        with self._lock:
+            return len(self._alerts)
 
     def total_count(self) -> int:
         with self._lock:

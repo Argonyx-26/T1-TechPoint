@@ -1,4 +1,4 @@
-# Argonyx — Intelligent Threat Detection & Situational Awareness
+# Argonyx - Intelligent Threat Detection & Situational Awareness
 
 Analyzes a live or uploaded video feed to detect anomalous behavior, flag
 potential security threats, prioritize alerts by severity, and give an
@@ -6,7 +6,7 @@ analyst a single dashboard to act on it.
 
 ## Core capabilities
 
-1. **General object/person detection** — pretrained YOLOv8 (COCO), works
+1. **General object/person detection** - pretrained YOLOv8 (COCO), works
    out of the box on any footage: detects people and objects, and tracks
    them frame-to-frame.
 2. **Behavior-based anomaly rules** on top of detection output:
@@ -15,13 +15,13 @@ analyst a single dashboard to act on it.
    - Unattended object (an item appears, its owner leaves, it remains)
    - Restricted zone intrusion (a person enters a marked no-go area)
    - Wrong-direction movement (entry/exit lane misuse)
-3. **Weapon detection** — a separate, pluggable pretrained YOLO model
+3. **Weapon detection** - a separate, pluggable pretrained YOLO model
    (gun/knife), run alongside the general model. Any hit is immediately
    flagged critical severity, no corroboration needed.
-4. **Severity scoring + prioritization** — weapon > unattended object >
+4. **Severity scoring + prioritization** - weapon > unattended object >
    restricted intrusion > crowd surge > wrong-direction > loitering, with a
    bonus when multiple alert types co-occur in the same zone/window.
-5. **Analyst dashboard** — live feed with bounding-box + zone overlays, a
+5. **Analyst dashboard** - live feed with bounding-box + zone overlays, a
    ranked alert sidebar, click-through evidence (the frame + what
    triggered it), and an upload-your-own-footage control.
 
@@ -63,9 +63,9 @@ pip install -r requirements.txt
 ```
 
 The general detector (`yolov8n.pt`) is downloaded automatically by
-`ultralytics` on first use — no manual setup required. It's a COCO-trained
+`ultralytics` on first use - no manual setup required. It's a COCO-trained
 model: it knows "person", "backpack", "bottle", etc., but **has no concept
-of weapons or of specific objects like a "can"** — see the note below.
+of weapons or of specific objects like a "can"** - see the note below.
 
 ### GPU acceleration (CUDA)
 
@@ -213,7 +213,7 @@ pytest tests/
 ```
 
 These exercise the rules engine and severity scoring against synthetic
-track data — no camera, model weights, or GPU required.
+track data - no camera, model weights, or GPU required.
 
 ## Runtime tuning
 

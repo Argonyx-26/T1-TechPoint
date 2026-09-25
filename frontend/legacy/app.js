@@ -33,7 +33,7 @@
   // workflow without depending on any real external system (radio, PA, door
   // locks) that this project doesn't actually control.
   const RESPONSE_ACTIONS = {
-    WEAPON: ["Alert on-site security immediately", "Do not approach — maintain distance", "Evacuate the immediate area", "Notify law enforcement"],
+    WEAPON: ["Alert on-site security immediately", "Do not approach - maintain distance", "Evacuate the immediate area", "Notify law enforcement"],
     RESTRICTED_ZONE_INTRUSION: ["Dispatch security to the zone", "Verify occupant authorization", "Review recent zone access"],
     CROWD_SURGE: ["Deploy crowd control to the zone", "Open additional exits if available", "Monitor for further buildup"],
     CROWD_THRESHOLD: ["Monitor the zone for further buildup", "Prepare crowd control if it keeps rising"],
@@ -321,7 +321,7 @@
   });
 
   async function fetchZones() {
-    const res = await fetch("/api/zones");
+    const res = await fetch("/api/zones?format=px");
     zones = await res.json();
     renderZoneChips();
     redraw();
@@ -492,7 +492,7 @@
               <span class="alert-score ${alert.band}">${alert.band} · ${alert.score}</span>
             </div>
             <div class="alert-message">${alert.message}</div>
-            <div class="alert-meta">${alert.zone_name ? alert.zone_name + " · " : ""}${timeAgo(alert.timestamp)}</div>
+            <div class="alert-meta">${alert.zone_name ? alert.zone_name + " · " : ""}${timeAgo(alert.created_at)}</div>
           </div>
         `;
         card.addEventListener("click", () => showAlertModal(alert));
@@ -514,7 +514,7 @@
       <div class="detail-row"><span>Severity</span><span>${alert.band} (${alert.score}/100)</span></div>
       <div class="detail-row"><span>Zone</span><span>${alert.zone_name || "-"}</span></div>
       <div class="detail-row"><span>Track IDs</span><span>${alert.track_ids.join(", ") || "-"}</span></div>
-      <div class="detail-row"><span>Time</span><span>${new Date(alert.timestamp * 1000).toLocaleTimeString()}</span></div>
+      <div class="detail-row"><span>Time</span><span>${new Date(alert.created_at * 1000).toLocaleTimeString()}</span></div>
       <div class="modal-actions">
         <button class="btn accent" id="modalReportBtn">Generate Incident Report</button>
       </div>
@@ -591,7 +591,7 @@
         <tr><td class="label">Type</td><td>${ruleLabel(alert.rule)}</td></tr>
         <tr><td class="label">Description</td><td>${alert.message}</td></tr>
         <tr><td class="label">Zone</td><td>${alert.zone_name || "N/A"}</td></tr>
-        <tr><td class="label">Detected at</td><td>${new Date(alert.timestamp * 1000).toLocaleString()}</td></tr>
+        <tr><td class="label">Detected at</td><td>${new Date(alert.created_at * 1000).toLocaleString()}</td></tr>
         <tr><td class="label">Report generated</td><td>${generatedAt}</td></tr>
       </table>
       ${evidenceImgTag ? `<h2>Evidence</h2>${evidenceImgTag}` : ""}

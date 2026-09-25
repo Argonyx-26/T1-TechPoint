@@ -53,7 +53,8 @@ class FramePipeline:
 
     def process(self, frame: np.ndarray) -> np.ndarray:
         timestamp = time.time()
-        zones = self.zone_store.list()
+        height, width = frame.shape[:2]
+        zones = [z.to_pixels(width, height) for z in self.zone_store.list()]
 
         detections = self.object_detector.infer(frame)
         tracks = self.track_manager.update(detections, timestamp)

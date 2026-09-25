@@ -37,10 +37,16 @@ def index():
     return (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
 
 
+@app.get("/legacy", response_class=HTMLResponse)
+def legacy_dashboard():
+    """The previous VIGIL dashboard (frontend/legacy/index.html)."""
+    return (FRONTEND_DIR / "legacy" / "index.html").read_text(encoding="utf-8")
+
+
 @app.get("/classic", response_class=HTMLResponse)
 def classic_dashboard():
-    """The original dashboard (frontend/classic.html + /static/app.js)."""
-    return (FRONTEND_DIR / "classic.html").read_text(encoding="utf-8")
+    """The original dashboard (frontend/legacy/classic.html + app.js)."""
+    return (FRONTEND_DIR / "legacy" / "classic.html").read_text(encoding="utf-8")
 
 
 def _mjpeg_generator():
@@ -95,24 +101,37 @@ class ZoneIn(BaseModel):
     allowed_direction: Optional[List[float]] = None
 
 
+def _zone_dict(z: Zone) -> dict:
+    return {
+        "id": z.id,
+        "name": z.name,
+        "polygon": z.polygon,
+        "restricted": z.restricted,
+        "crowd_threshold": z.crowd_threshold,
+        "loiter_seconds": z.loiter_seconds,
+        "allowed_direction": z.allowed_direction,
+    }
+
+
 @app.get("/api/zones")
-def get_zones():
-    return [
-        {
-            "id": z.id,
-            "name": z.name,
-            "polygon": z.polygon,
-            "restricted": z.restricted,
-            "crowd_threshold": z.crowd_threshold,
-            "loiter_seconds": z.loiter_seconds,
-            "allowed_direction": z.allowed_direction,
-        }
-        for z in app_state.pipeline.zone_store.list()
-    ]
+def get_zones(format: str = "normalized"):
+    """Zones as normalized 0-1 polygons. `?format=px` returns frame pixels
+    for the current source (used by the legacy dashboards)."""
+    width, height = app_state.frame_size()
+    zones = app_state.pipeline.zone_store.list()
+    if format == "px" and width and height:
+        zones = [z.to_pixels(width, height) for z in zones]
+    else:
+        zones = [z.to_normalized(width, height) for z in zones]
+    return [_zone_dict(z) for z in zones]
 
 
 @app.post("/api/zones")
 def set_zones(zones: List[ZoneIn]):
+    """Replaces the full zone list. Polygons may be normalized (0-1) or, from
+    older clients, frame pixels; pixels are normalized against the current
+    source when one is running."""
+    width, height = app_state.frame_size()
     parsed = [
         Zone(
             id=z.id,
@@ -122,7 +141,7 @@ def set_zones(zones: List[ZoneIn]):
             crowd_threshold=z.crowd_threshold,
             loiter_seconds=z.loiter_seconds,
             allowed_direction=tuple(z.allowed_direction) if z.allowed_direction else None,
-        )
+        ).to_normalized(width, height)
         for z in zones
     ]
     app_state.pipeline.zone_store.replace_all(parsed)

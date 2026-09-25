@@ -86,6 +86,12 @@ class AppState:
             if dt < min_frame_time:
                 time.sleep(min_frame_time - dt)
 
+    def frame_size(self):
+        """(width, height) of the current source's frames, (0, 0) if none yet."""
+        with self._lock:
+            h, w = self._frame_shape
+        return w, h
+
     def latest_jpeg(self) -> Optional[bytes]:
         with self._lock:
             return self._latest_jpeg
@@ -104,6 +110,9 @@ class AppState:
             "weapon_detector_enabled": self.pipeline.weapon_detector.enabled,
             "device": config.DEVICE,
             "objects": dict(self.pipeline.last_object_counts),
+            "object_counts": dict(self.pipeline.last_object_counts),
+            "object_count": sum(self.pipeline.last_object_counts.values()),
+            "alert_count": self.pipeline.alert_manager.active_count(),
             "zone_counts": dict(self.pipeline.rule_engine.zone_counts),
             "capture_ms": capture_ms,
             "inference_ms": inference_ms,

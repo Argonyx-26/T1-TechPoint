@@ -8,7 +8,7 @@ shape, then flip on whichever checks apply to it.
 """
 import json
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -26,6 +26,38 @@ class Zone:
     crowd_threshold: Optional[int] = None
     loiter_seconds: Optional[float] = None
     allowed_direction: Optional[Tuple[float, float]] = None
+
+    @property
+    def is_normalized(self) -> bool:
+        """Polygons are stored normalized (0-1, resolution independent). Zones
+        saved by older dashboards in frame pixels are still accepted."""
+        return bool(self.polygon) and max(max(abs(x), abs(y)) for x, y in self.polygon) <= 1.0
+
+    def to_pixels(self, width: int, height: int) -> "Zone":
+        """Copy of this zone in frame-pixel coordinates, the space the rules run in."""
+        if not self.is_normalized:
+            return self
+        direction = self.allowed_direction
+        if direction:
+            direction = (direction[0] * width, direction[1] * height)
+        return replace(
+            self,
+            polygon=[(x * width, y * height) for x, y in self.polygon],
+            allowed_direction=direction,
+        )
+
+    def to_normalized(self, width: int, height: int) -> "Zone":
+        """Copy of this zone in 0-1 coordinates (for clients that send pixels)."""
+        if self.is_normalized or not width or not height:
+            return self
+        direction = self.allowed_direction
+        if direction:
+            direction = (direction[0] / width, direction[1] / height)
+        return replace(
+            self,
+            polygon=[(x / width, y / height) for x, y in self.polygon],
+            allowed_direction=direction,
+        )
 
 
 class ZoneStore:

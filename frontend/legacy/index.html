@@ -1363,34 +1363,6 @@ textarea:focus {
     .modal-details { grid-template-columns: 1fr; }
 }
 
-
-/* DYNAMIC MULTI-CAMERA WALL */
-.camera-wall{display:grid;grid-template-columns:1fr;gap:14px;padding:0 22px 22px;transition:grid-template-columns .25s ease}
-.camera-wall.count-2{grid-template-columns:repeat(2,minmax(0,1fr))}
-.camera-wall.count-3,.camera-wall.count-4{grid-template-columns:repeat(2,minmax(0,1fr))}
-.camera-wall.count-5,.camera-wall.count-6,.camera-wall.count-7,.camera-wall.count-8,.camera-wall.count-9{grid-template-columns:repeat(3,minmax(0,1fr))}
-.camera-tile{min-width:0;background:var(--noir-raised);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;transition:border-color .2s ease,transform .2s ease}
-.camera-tile:hover{border-color:var(--wasabi-dim);transform:translateY(-1px)}
-.camera-tile-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border)}
-.camera-title{display:flex;align-items:center;gap:8px;min-width:0}.camera-title strong{font-size:11px;letter-spacing:1px;white-space:nowrap}.camera-title small{color:var(--wasabi-dim);font-family:var(--font-mono);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.camera-live{display:flex;align-items:center;gap:5px;color:var(--earth);font-family:var(--font-mono);font-size:8px;letter-spacing:1px;white-space:nowrap}.camera-live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--earth)}.camera-live.offline{color:var(--wasabi-dim)}.camera-live.offline::before{background:var(--wasabi-dim)}
-.camera-feed{position:relative;aspect-ratio:16/9;background:#080d0c;overflow:hidden}.camera-feed video,.camera-feed img{width:100%;height:100%;display:block;object-fit:cover}.camera-feed img{display:none}.camera-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:5px;padding:20px;color:var(--wasabi-dim);font-size:10px;letter-spacing:.8px}.camera-empty small{font-size:9px;letter-spacing:.3px}
-.camera-overlay{position:absolute;left:8px;top:8px;right:8px;display:flex;justify-content:space-between;pointer-events:none;font-family:var(--font-mono);font-size:8px;letter-spacing:.7px;color:#aebdb6;text-shadow:0 1px 4px #000}.camera-controls{display:grid;grid-template-columns:1fr auto;gap:7px;padding:9px}.camera-controls input{min-width:0;background:var(--noir);border:1px solid var(--border);border-radius:5px;padding:8px 9px;font-size:10px;color:var(--text-primary)}.camera-controls button{padding:8px 10px;font-size:9px}.camera-actions{display:flex;gap:7px;padding:0 9px 9px}.camera-actions button{flex:1}.camera-file{display:none}
-.camera-wall-header-actions{display:flex;align-items:center;gap:10px}.camera-remove{width:26px;height:26px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;font-size:15px!important;line-height:1}
-@media(max-width:900px){.camera-wall,.camera-wall.count-2,.camera-wall.count-3,.camera-wall.count-4,.camera-wall.count-5,.camera-wall.count-6,.camera-wall.count-7,.camera-wall.count-8,.camera-wall.count-9{grid-template-columns:1fr}}
-@media(max-width:600px){.camera-wall-header-actions{gap:7px}}
-.demo-camera-btn {
-    font-size: 10px;
-    letter-spacing: 1px;
-    padding: 8px 10px;
-    white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-    .camera-wall-header-actions {
-        flex-wrap: wrap;
-    }
-}
 </style>
 
     <link
@@ -1421,8 +1393,8 @@ textarea:focus {
     </div>
 
     <div class="system-state">
-        <span class="status-dot" id="systemDot"></span>
-        <span id="systemOnline">CONNECTING...</span>
+        <span class="status-dot"></span>
+        <span>SYSTEM ONLINE</span>
         <span class="system-time" id="clock">00:00:00</span>
     </div>
 
@@ -1559,20 +1531,6 @@ textarea:focus {
             </section>
 
 
-            <!-- DYNAMIC MULTI-CAMERA SURVEILLANCE -->
-            <section class="panel multi-camera-panel hidden" id="cameraWallPanel">
-                <div class="panel-header">
-                    <div>
-                        <span class="section-kicker">MULTI-SOURCE SURVEILLANCE</span>
-                        <h2>Camera Wall</h2>
-                    </div>
-                    <div class="camera-wall-header-actions">
-                        <span class="live-indicator"><span></span> AUTO-EXPANDING FEED</span>
-                    </div>
-                </div>
-                <div class="camera-wall count-1" id="cameraWall"></div>
-            </section>
-
             <!-- SOURCE CONTROL -->
 
             <section class="panel">
@@ -1590,7 +1548,7 @@ textarea:focus {
                         <span class="source-icon">◉</span>
                         <span>
                             <b>Laptop Webcam</b>
-                            <small>Laptop camera (backend)</small>
+                            <small>Browser camera</small>
                         </span>
                     </button>
 
@@ -2129,7 +2087,7 @@ const RESPONSE_ACTIONS = {
 let alerts = [];
 let simulatedAlerts = [];     // client-side demo alerts, never sent to the backend
 let seenAlertIds = null;      // null until first load, so old alerts don't sound the alarm
-let zones = [];               // polygons normalized 0-1, exactly as the backend stores them
+let zones = [];               // polygons in FRAME PIXELS, exactly as the backend stores them
 let zoneCounts = {};          // zone id -> live person count
 let frameSize = { w: 1280, h: 720 };
 let backendRunning = false;
@@ -2137,7 +2095,6 @@ let currentSource = null;
 
 let drawingZone = false;
 let currentPolygon = [];      // canvas pixels while drawing
-let browserPreviewStream = null; // fallback ONLY when the backend is unreachable
 
 
 /* =========================================
@@ -2275,12 +2232,9 @@ async function loadStatus() {
 
         const data = await api("/status");
 
-        setBackendOnline(true);
         updateStatusUI(data);
 
     } catch {
-
-        setBackendOnline(false);
 
         // Backend unreachable - keep the UI alive.
         systemStatus.textContent = "OFFLINE";
@@ -2288,12 +2242,6 @@ async function loadStatus() {
     }
 }
 
-
-function setBackendOnline(online) {
-    document.getElementById("systemOnline").textContent =
-        online ? "SYSTEM ONLINE" : "BACKEND OFFLINE";
-    document.getElementById("systemDot").classList.toggle("green", online);
-}
 
 function updateStatusUI(data) {
 
@@ -2348,10 +2296,7 @@ function ruleLabel(rule) {
         .replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function formatAlertTime(alertOrTs) {
-    const ts = typeof alertOrTs === "object" && alertOrTs
-        ? (alertOrTs.created_at ?? alertOrTs.timestamp)
-        : alertOrTs;
+function formatAlertTime(ts) {
     if (typeof ts !== "number") return String(ts || "-");
     return new Date(ts * 1000).toLocaleTimeString("en-IN", { hour12: false });
 }
@@ -2446,7 +2391,7 @@ function renderAlerts() {
             </div>
 
             <div class="alert-time">
-                ${escapeHTML(formatAlertTime(alert) + zone)}
+                ${escapeHTML(formatAlertTime(alert.timestamp) + zone)}
                 ${alert.score != null ? ` • SCORE ${alert.score}` : ""}
             </div>
 
@@ -2480,7 +2425,7 @@ function openEvidence(alert) {
     document.getElementById("modalType").textContent = ruleLabel(alert.rule);
     document.getElementById("modalSeverity").textContent =
         alert.score != null ? `${band} (${alert.score})` : band;
-    document.getElementById("modalTime").textContent = formatAlertTime(alert);
+    document.getElementById("modalTime").textContent = formatAlertTime(alert.timestamp);
     document.getElementById("modalMessage").textContent =
         (alert.message || "") + (alert.zone_name ? ` - zone: ${alert.zone_name}` : "");
 
@@ -2556,8 +2501,6 @@ function setPipelineStatus(label) {
 function showVideo() {
     // Two independent MJPEG connections: the main feed and the zone-drawing backdrop.
     const bust = Date.now();
-
-    stopBrowserPreview();
 
     videoPlaceholder.style.display = "none";
     videoFeed.style.display = "block";
@@ -2666,45 +2609,10 @@ async function connectSource(type, value) {
         showToast(`${labels[type].toLowerCase()} connected`);
 
     } catch (error) {
-        // fetch() rejects with a TypeError only when the backend can't be
-        // reached at all; an HTTP error means the backend is up but refused.
-        if (type === "webcam" && error instanceof TypeError) {
-            startBrowserPreview();
-            return;
-        }
         setPipelineStatus(`${labels[type]} FAILED`);
         showToast(error.message || "Could not connect source");
         logAudit("SOURCE_ERROR", `${labels[type]}: ${error.message}`);
     }
-}
-
-async function startBrowserPreview() {
-    showToast("Backend offline - preview only, no detection");
-    if (!navigator.mediaDevices?.getUserMedia) return;
-    try {
-        stopBrowserPreview();
-        browserPreviewStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        const local = document.getElementById("localWebcam");
-        local.srcObject = browserPreviewStream;
-        await local.play();
-        videoPlaceholder.style.display = "none";
-        videoFeed.style.display = "none";
-        local.style.display = "block";
-        setPipelineStatus("PREVIEW ONLY - NO DETECTION");
-        document.getElementById("aiState").textContent = "OFFLINE - NO DETECTION";
-        logAudit("WEBCAM_PREVIEW_ONLY", "Backend unreachable; browser preview without detection");
-    } catch {
-        setPipelineStatus("WEBCAM UNAVAILABLE");
-    }
-}
-
-function stopBrowserPreview() {
-    if (!browserPreviewStream) return;
-    browserPreviewStream.getTracks().forEach(t => t.stop());
-    browserPreviewStream = null;
-    const local = document.getElementById("localWebcam");
-    local.srcObject = null;
-    local.style.display = "none";
 }
 
 
@@ -2813,8 +2721,8 @@ document
 /* =========================================
    ZONE DRAWING
    The canvas wrapper takes the frame's aspect
-   ratio, so canvas point / canvas size is the
-   same normalized (0-1) point on the frame.
+   ratio, so canvas px scale linearly to frame
+   px - the space the backend's rules run in.
 ========================================= */
 
 const canvas = document.getElementById("zoneCanvas");
@@ -2830,16 +2738,15 @@ function setFrameSize(w, h) {
 
 function toCanvas(point) {
     return {
-        x: point[0] * canvas.width,
-        y: point[1] * canvas.height
+        x: point[0] * (canvas.width / frameSize.w),
+        y: point[1] * (canvas.height / frameSize.h)
     };
 }
 
 function toFrame(point) {
-    // Normalized 0-1 coordinates on the analyzed frame.
     return [
-        Math.round((point.x / canvas.width) * 10000) / 10000,
-        Math.round((point.y / canvas.height) * 10000) / 10000
+        Math.round(point.x * (frameSize.w / canvas.width)),
+        Math.round(point.y * (frameSize.h / canvas.height))
     ];
 }
 
@@ -3149,7 +3056,7 @@ document.getElementById("saveZone").addEventListener("click", async () => {
 
 async function loadZones() {
     try {
-        const remoteZones = await api("/zones");
+        const remoteZones = await api("/zones?format=px");
         if (Array.isArray(remoteZones)) zones = remoteZones;
     } catch {}
 
@@ -3404,7 +3311,7 @@ document
             source: currentSource,
             active_alerts: alerts.map(a => ({
                 ...a,
-                time: formatAlertTime(a),
+                time: formatAlertTime(a.timestamp),
                 evidence_url: a.has_evidence ? `${location.origin}${API}/alerts/${a.id}/evidence` : null
             })),
             simulated_alerts: simulatedAlerts,
