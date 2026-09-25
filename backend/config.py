@@ -9,8 +9,19 @@ ROOT = Path(__file__).resolve().parent.parent
 GENERAL_MODEL_PATH = ROOT / "pretrained" / "yolov8n.pt"  # COCO, falls back to auto-download
 WEAPON_MODEL_PATH = ROOT / "pretrained" / "weapon_model" / "best.pt"  # pretrained pre-event, disclosed
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+HALF = DEVICE.startswith("cuda")  # fp16 only helps (and only works) on GPU
+PRECISION = 16 if HALF else 32  # ultralytics 8.4 "quantize" arg (replaces deprecated half=)
 INFER_IMGSZ = 640
 TRACKER_CFG = "bytetrack.yaml"
+
+# Weapon detector (run10: pistol, smartphone, knife, monedero, billete, tarjeta).
+# The other four classes are confusors that soak up phones/wallets; only these alert.
+WEAPON_THREAT_CLASSES = {"pistol", "knife"}
+WEAPON_DISPLAY_CONF = 0.25  # draw a box only
+WEAPON_ALERT_CONF = 0.5     # counts toward confirmation
+WEAPON_WINDOW = 8           # frames of weapon inference kept
+WEAPON_MIN_HITS = 5         # hits in the window needed to confirm
+WEAPON_EVERY_N_FRAMES = 1   # raise on slow CPU machines; the window then spans N x 8 frames
 
 # Two-tier confidence: low floor keeps boxes from flickering, higher bar counts toward alerts
 DISPLAY_CONF = 0.25

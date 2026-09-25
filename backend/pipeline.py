@@ -1,7 +1,8 @@
 """Per-frame loop on a background thread.
 
-Current stages: read frame -> general detection + tracking -> draw overlays -> JPEG encode.
-Still to add: rule evaluation, weapon detection, temporal filter, alert ingestion.
+Current stages: read frame -> general detection + tracking -> weapon detection ->
+temporal filter -> draw overlays -> JPEG encode.
+Still to add: rule evaluation, alert ingestion.
 """
 import threading
 import time
@@ -10,17 +11,26 @@ import cv2
 import numpy as np
 
 from backend import config
+from backend.detection.weapon_detector import WeaponDetector
 from backend.tracking import GeneralDetector, TrackManager
 from backend.video_source import VideoSource
+from backend.weapon_filter import WeaponFilter
 
 PERSON_COLOR = (0, 200, 0)
 OBJECT_COLOR = (200, 160, 0)
+WEAPON_RAW_COLOR = (0, 140, 255)
+CRITICAL_COLOR = (0, 0, 220)
 
 
 class Pipeline:
-    def __init__(self):
+    def __init__(self, use_weapon_model: bool = True):
         self.detector = GeneralDetector()
         self.tracks = TrackManager(self.detector.names)
+        self.weapons = WeaponDetector(enabled=use_weapon_model)
+        self.weapon_filter = WeaponFilter()
+        self.weapon_dets: list = []
+        self.confirmed_weapons: set[str] = set()
+        self.frame_index = 0
         self.source: VideoSource | None = None
         self.started_at = time.time()
 
@@ -39,13 +49,22 @@ class Pipeline:
 
     def load(self) -> None:
         self.detector.warmup()
+        self.weapons.warmup()
+
+    def reset_state(self) -> None:
+        """Forget per-source state so nothing leaks from the previous video."""
+        self.detector.reset()
+        self.tracks.reset()
+        self.weapon_filter.reset()
+        self.weapon_dets = []
+        self.confirmed_weapons = set()
+        self.frame_index = 0
 
     def start(self, kind: str, value) -> None:
         self.stop()
         src = VideoSource(kind, value)
         src.open()  # raise here so the API can report a bad source
-        self.detector.reset()
-        self.tracks.reset()
+        self.reset_state()
         self.source = src
         self.last_error = None
         self._stop.clear()
@@ -82,13 +101,7 @@ class Pipeline:
                 continue
 
             t0 = time.perf_counter()
-            try:
-                detections = self.detector.track(frame)
-            except Exception as exc:  # keep the stream alive on a bad frame
-                self.last_error = f"detection failed: {exc}"
-                detections = []
-            active = self.tracks.update(detections)
-            self._draw(frame, active)
+            jpeg = self.process_frame(frame)
             self.latency_ms = (time.perf_counter() - t0) * 1000
 
             now = time.perf_counter()
@@ -96,8 +109,46 @@ class Pipeline:
             prev = now
             ema_fps = inst if ema_fps == 0 else 0.9 * ema_fps + 0.1 * inst
             self.fps = ema_fps
-            self.active_tracks = active
-            self._publish(frame)
+            self._publish_jpeg(jpeg)
+
+    def process_frame(self, frame) -> bytes:
+        """Run every stage on one frame (annotated in place). Returns the JPEG."""
+        try:
+            detections = self.detector.track(frame)
+        except Exception as exc:  # keep the stream alive on a bad frame
+            self.last_error = f"detection failed: {exc}"
+            detections = []
+        active = self.tracks.update(detections)
+        self.active_tracks = active
+
+        # Between inference frames the last raw boxes and confirmed state carry over
+        if self.weapons.available and self.frame_index % config.WEAPON_EVERY_N_FRAMES == 0:
+            try:
+                self.weapon_dets = self.weapons.detect(frame)
+            except Exception as exc:
+                self.last_error = f"weapon detection failed: {exc}"
+                self.weapon_dets = []
+            self.confirmed_weapons = set(self.weapon_filter.update(self.weapon_dets))
+        self.frame_index += 1
+
+        self._draw(frame, active)
+        self._draw_weapons(frame, self.weapon_dets, self.confirmed_weapons)
+        return self._encode(frame)
+
+    def _draw_weapons(self, frame, dets, confirmed: set) -> None:
+        for d in dets:
+            x1, y1, x2, y2 = map(int, d.bbox)
+            color = CRITICAL_COLOR if d.cls_name in confirmed else WEAPON_RAW_COLOR
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, f"{d.cls_name} {d.conf:.2f}", (x1, max(y2 + 16, 16)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        if not confirmed:
+            return
+        # Gated on the sustained/confirmed state only, never on a raw single-frame hit
+        text = "CRITICAL THREAT: " + ", ".join(sorted(confirmed)).upper()
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+        cv2.rectangle(frame, (0, 0), (tw + 24, th + 24), CRITICAL_COLOR, -1)
+        cv2.putText(frame, text, (12, th + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
 
     def _draw(self, frame, tracks) -> None:
         for t in tracks:
@@ -112,7 +163,9 @@ class Pipeline:
     # ---- frame publishing -----------------------------------------------
 
     def _publish(self, frame) -> None:
-        jpeg = self._encode(frame)
+        self._publish_jpeg(self._encode(frame))
+
+    def _publish_jpeg(self, jpeg: bytes) -> None:
         with self._lock:
             self._jpeg = jpeg
             self.frame_id += 1
