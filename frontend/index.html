@@ -3002,7 +3002,7 @@ function renderAlerts() {
 
     if (!shown.length) {
 
-        const day = (lastAlertBatch || []).filter(a => Date.now() / 1000 - a.timestamp <= 86400);
+        const day = (lastAlertBatch || []).filter(a => Date.now() / 1000 - a.created_at <= 86400);
         const n = band => day.filter(a => a.band === band).length;
         alertList.innerHTML = `
             <div class="empty-alerts">
@@ -5874,7 +5874,7 @@ function updateOps(status, cams, alertBatch) {
         live.classList.toggle("idle", !online.length);
         live.querySelector(".live-text").textContent = online.length ? "LIVE" : "IDLE";
     }
-    const hour = (alertBatch || []).filter(a => Date.now() / 1000 - a.timestamp <= 3600);
+    const hour = (alertBatch || []).filter(a => Date.now() / 1000 - a.created_at <= 3600);
     const sev = document.querySelectorAll("#opsSev .sev b");
     ["CRITICAL", "HIGH", "MEDIUM", "LOW"].forEach((b, i) => { sev[i].textContent = hour.filter(a => a.band === b).length; });
 }
