@@ -1713,6 +1713,38 @@ textarea:focus {
 
     </section>
 
+    <!-- OPERATIONS OVERVIEW: live system picture, also when nothing is running -->
+    <section class="ops-strip" id="opsStrip">
+        <div class="ops-card">
+            <span class="ops-label">CAMERAS ONLINE</span>
+            <strong id="opsCams">0 / 0</strong>
+            <div class="ops-bar"><span id="opsCamsBar" style="width:0%"></span></div>
+        </div>
+        <div class="ops-card">
+            <span class="ops-label">AVG ANALYSIS RATE</span>
+            <strong id="opsFps">-</strong>
+            <small id="opsDevice">-</small>
+        </div>
+        <div class="ops-card ops-wide">
+            <span class="ops-label">DETECTION ACTIVE</span>
+            <div class="ops-chips" id="opsChips"></div>
+        </div>
+        <div class="ops-card">
+            <span class="ops-label">ALERTS, LAST HOUR</span>
+            <div class="ops-sev" id="opsSev">
+                <span class="sev c" title="Critical"><b>0</b>CRIT</span>
+                <span class="sev h" title="High"><b>0</b>HIGH</span>
+                <span class="sev m" title="Medium"><b>0</b>MED</span>
+                <span class="sev l" title="Low"><b>0</b>LOW</span>
+            </div>
+        </div>
+        <div class="ops-card">
+            <span class="ops-label">UPTIME</span>
+            <strong id="opsUptime">-</strong>
+            <small id="opsTotal">0 alerts since start</small>
+        </div>
+    </section>
+
 
     <!-- ============================= -->
     <!-- MAIN CONTENT -->
@@ -1737,9 +1769,9 @@ textarea:focus {
                         <h2>Threat Monitoring</h2>
                     </div>
 
-                    <div class="live-indicator">
+                    <div class="live-indicator" id="mainLive">
                         <span></span>
-                        LIVE
+                        <b class="live-text">LIVE</b>
                     </div>
 
                 </div>
@@ -1769,7 +1801,14 @@ textarea:focus {
                         </div>
 
                         <h3>NO ACTIVE VIDEO SOURCE</h3>
-                        <p>Select a camera, webcam or sample feed.</p>
+                        <p>Start monitoring in one click:</p>
+
+                        <div class="quick-start">
+                            <button type="button" data-qs="demo"><b>&#9654;</b><span>4-camera demo</span><small>real footage, full analysis</small></button>
+                            <button type="button" data-qs="webcam"><b>&#9673;</b><span>Laptop webcam</span><small>live, this device</small></button>
+                            <button type="button" data-qs="phone"><b>&#9742;</b><span>Phone camera</span><small>DroidCam / IP Webcam</small></button>
+                            <button type="button" data-qs="footage"><b>&#8682;</b><span>Load footage</span><small>analyse a video file</small></button>
+                        </div>
 
                     </div>
 
@@ -2912,6 +2951,7 @@ async function loadAlerts(prefetched) {
     try {
 
         const fresh = prefetched ?? await api("/alerts?limit=50");
+        lastAlertBatch = fresh;
 
         if (seenAlertIds === null) {
             // First load: pre-existing alerts are not new events.
@@ -2954,17 +2994,24 @@ function renderAlerts() {
 
     if (!shown.length) {
 
+        const day = (lastAlertBatch || []).filter(a => Date.now() / 1000 - a.timestamp <= 86400);
+        const n = band => day.filter(a => a.band === band).length;
         alertList.innerHTML = `
             <div class="empty-alerts">
 
                 <div class="empty-icon">✓</div>
 
-                <h3>No Active Threats</h3>
+                <h3>All Clear</h3>
 
                 <p>
-                    The detection engine has not
-                    identified any threats.
+                    No unacknowledged threats. Every camera
+                    feed is being analysed.
                 </p>
+
+                <div class="day-summary">
+                    <span class="ds-title">LAST 24 HOURS</span>
+                    <div><span class="sev c"><b>${n("CRITICAL")}</b>CRIT</span><span class="sev h"><b>${n("HIGH")}</b>HIGH</span><span class="sev m"><b>${n("MEDIUM")}</b>MED</span><span class="sev l"><b>${n("LOW")}</b>LOW</span></div>
+                </div>
 
             </div>
         `;
@@ -5777,6 +5824,66 @@ initialize();
 
 
 /* =========================================
+   OPERATIONS OVERVIEW + QUICK START
+========================================= */
+
+let lastAlertBatch = [];
+let opsFeatures = null;
+const OPS_MODULES = [
+    ["weapons", "Weapons"], ["fighting", "Fight model"], ["pose", "Pose"], ["distress", "Distress / panic"],
+    ["throwing", "Throwing"], ["search", "Ask Vigil"], ["reid", "Re-ID"], ["gap_tracking", "Blind spots"]
+];
+
+function fmtUptime(s) {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h ? `${h}h ${m}m` : `${m}m ${Math.floor(s % 60)}s`;
+}
+
+async function refreshOpsFeatures() {
+    try { opsFeatures = await api("/features"); } catch {}
+}
+
+function updateOps(status, cams, alertBatch) {
+    if (!status) return;
+    const online = (cams || []).filter(c => c.status === "online");
+    const total = (cams || []).length;
+    document.getElementById("opsCams").textContent = `${online.length} / ${total}`;
+    document.getElementById("opsCamsBar").style.width = total ? `${online.length / total * 100}%` : "0%";
+    const fps = online.length ? online.reduce((a, c) => a + (c.fps || 0), 0) / online.length : 0;
+    document.getElementById("opsFps").textContent = online.length ? `${fps.toFixed(1)} fps` : "idle";
+    document.getElementById("opsDevice").textContent =
+        `${(status.device || "").startsWith("cuda") ? "GPU" : "CPU"} \u00b7 ${status.weapon_model || "no weapon model"}`;
+    document.getElementById("opsUptime").textContent = fmtUptime(status.uptime_seconds || 0);
+    document.getElementById("opsTotal").textContent = `${status.total_alerts || 0} alerts since start`;
+    const f = opsFeatures || {};
+    const state = { weapons: !!status.weapon_detector_enabled, fighting: !!(f.fighting && status.fight_model) };
+    document.getElementById("opsChips").innerHTML = OPS_MODULES.map(([key, label]) => {
+        const on = key in state ? state[key] : !!f[key];
+        return `<span class="ops-chip ${on ? "on" : ""}">${escapeHTML(label)}</span>`;
+    }).join("");
+    const live = document.getElementById("mainLive");
+    if (live) {
+        live.classList.toggle("idle", !online.length);
+        live.querySelector(".live-text").textContent = online.length ? "LIVE" : "IDLE";
+    }
+    const hour = (alertBatch || []).filter(a => Date.now() / 1000 - a.timestamp <= 3600);
+    const sev = document.querySelectorAll("#opsSev .sev b");
+    ["CRITICAL", "HIGH", "MEDIUM", "LOW"].forEach((b, i) => { sev[i].textContent = hour.filter(a => a.band === b).length; });
+}
+
+document.querySelectorAll(".quick-start button").forEach(btn => btn.addEventListener("click", () => {
+    const action = btn.dataset.qs;
+    if (action === "demo") document.getElementById("demoStartBtn").click();
+    else if (action === "phone") document.getElementById("addCameraBtn").click();
+    else if (action === "footage") document.getElementById("uploadBtn").click();
+    else if (action === "webcam") handleSourceSelection("webcam");
+}));
+
+refreshOpsFeatures();
+setInterval(refreshOpsFeatures, 10000);
+
+
+/* =========================================
    AUTO REFRESH
 ========================================= */
 
@@ -5794,6 +5901,7 @@ async function pollDashboard() {
         await loadAlerts(d.alerts);
         await loadCameras(d.cameras);
         await loadMovements(d.movements);
+        updateOps(d.status, d.cameras, d.alerts);
     } catch {
         loadStatus();   // shows BACKEND OFFLINE
     } finally {

@@ -88,6 +88,8 @@ class AppState:
             "frame_width": cam.get("frame_width", 0),
             "frame_height": cam.get("frame_height", 0),
             "weapon_detector_enabled": self.manager.shared.weapon.enabled,
+            "weapon_model": config.WEAPON_MODEL_PATH.name,
+            "fight_model": config.FIGHT_CLF_MODEL.exists(),
             "device": config.DEVICE,
             "objects": counts,
             "object_counts": counts,
