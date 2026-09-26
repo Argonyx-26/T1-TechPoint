@@ -27,3 +27,6 @@ models/clip/
 
 # weapon alert debug dumps
 debug/
+
+# training runs (weights are copied into models/)
+runs/weapon_training/
