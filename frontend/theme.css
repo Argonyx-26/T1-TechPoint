@@ -242,3 +242,79 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 .toast-dot { background: var(--green); }
 
 * { text-shadow: none; }
+
+/* =========================================================
+   VIBRANCY LAYER: colour where it means something, white where you read
+========================================================= */
+:root {
+    --teal:       #1F7A8C;
+    --teal-soft:  #DDF0F3;
+    --gold:       #D9A441;
+    --console:    linear-gradient(120deg, #1B3446 0%, #22506A 55%, #1F7A8C 100%);
+}
+
+/* top bar = operations console band */
+.topbar {
+    background: var(--console);
+    border-bottom: 3px solid var(--gold);
+    box-shadow: 0 4px 18px rgba(20, 45, 60, .35);
+}
+.brand h1 { color: #fff; }
+.brand p { color: #CFE3EA; opacity: 1; }
+.brand-mark span { background: linear-gradient(180deg, var(--gold), #F3D38A); }
+.system-state { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .28); color: #E8F3F6; }
+.system-time { color: #fff; border-left-color: rgba(255, 255, 255, .3); }
+.status-dot, .status-dot.green { background: #5FD39A; box-shadow: 0 0 0 4px rgba(95, 211, 154, .25); }
+
+/* metric cards: one accent each */
+.metric-card { border-top: 4px solid var(--navy); }
+.metrics .metric-card:nth-child(1) { border-top-color: var(--navy); }
+.metrics .metric-card:nth-child(2) { border-top-color: var(--teal); }
+.metrics .metric-card:nth-child(3) { border-top-color: var(--amber); }
+.metrics .metric-card:nth-child(4) { border-top-color: var(--green); }
+.metric-icon, .metric-icon.blue, .metric-icon.purple { background: var(--navy); color: #fff; }
+.metric-icon.green  { background: var(--teal); color: #fff; }
+.metric-icon.orange { background: var(--amber); color: #fff; }
+.metrics .metric-card:nth-child(4) .metric-icon { background: var(--green); color: #fff; }
+.metric-card strong { font-size: 22px; }
+.metrics .metric-card:nth-child(3) strong { color: var(--amber); }
+
+/* panel headers: tinted band + accent bar */
+.panel-header {
+    background: linear-gradient(90deg, #EEF4F7 0%, #FFFFFF 70%);
+    border-left: 4px solid var(--teal);
+}
+.section-kicker { color: var(--teal); }
+.panel-header h2 { color: var(--navy); }
+.sidebar .panel:first-child .panel-header { border-left-color: var(--red); background: linear-gradient(90deg, #FBEDEA 0%, #FFFFFF 70%); }
+
+/* buttons */
+.primary-btn { background: linear-gradient(120deg, var(--navy), var(--teal)); border-color: var(--navy); box-shadow: 0 2px 8px rgba(31, 122, 140, .28); }
+.primary-btn:hover { background: linear-gradient(120deg, var(--navy-deep), #1A6A7A); }
+.secondary-btn:hover { background: var(--teal-soft); border-color: var(--teal); color: var(--navy-deep); }
+.danger-btn { background: var(--red); color: #fff; border-color: var(--red); }
+.danger-btn:hover { background: #A0402F; }
+
+/* status chips */
+.live-indicator { background: #DDF5E8; border-color: #9ED9B7; color: #1E7A4A; }
+.live-indicator span:first-child { background: #22A45D; }
+.alert-counter { background: var(--navy); color: #fff; }              /* neutral counts (audit, Ask Vigil) */
+#sidebarAlertCount { background: var(--green-soft); color: var(--green); }
+#sidebarAlertCount.has-alerts { background: var(--red); color: #fff; }  /* red only when there is something to act on */
+.alert-severity.critical { background: var(--red); color: #fff; }
+.alert-severity.high     { background: var(--amber); color: #fff; }
+.alert-severity.medium   { background: var(--navy); color: #fff; }
+.alert-severity.low      { background: var(--green); color: #fff; }
+.alert-item { border-left-width: 4px; }
+.chain-badge.verified { background: #DDF5E8; color: #1E7A4A; }
+
+/* map / modes / chips */
+.map-mode button.active { background: var(--teal); color: #fff; }
+.source-btn.active { background: var(--teal-soft); border-color: var(--teal); }
+.source-btn.active .source-icon { color: var(--teal); }
+.ask-chip { background: var(--teal-soft); border-color: #A9D6DE; color: #155E6C; }
+.tl-seg { background: var(--teal); }
+.tl-seg.open { background: linear-gradient(90deg, var(--teal), #5FB3C2); }
+.camera-live { color: #1E7A4A; }
+.camera-live::before { background: #22A45D; }
+.threshold-group-label { color: var(--teal); }

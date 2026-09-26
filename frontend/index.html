@@ -2950,6 +2950,7 @@ function renderAlerts() {
 
     alertCount.textContent = shown.length;
     sidebarAlertCount.textContent = shown.length;
+    sidebarAlertCount.classList.toggle("has-alerts", shown.length > 0);
 
     if (!shown.length) {
 
