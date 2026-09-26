@@ -79,10 +79,11 @@ def main():
     ap.add_argument("--conf", type=float, default=config.WEAPON_ALERT_MIN_CONF)
     ap.add_argument("--every", type=int, default=1, help="use every Nth frame")
     ap.add_argument("--save", default="")
+    ap.add_argument("--prefix", default="", help="only frames whose file name starts with this, e.g. Cam5 (held out)")
     args = ap.parse_args()
 
     detect = make_detector(args.detector, args.model)
-    files = sorted(glob.glob(os.path.join(args.root, "*.xml")))[:: args.every]
+    files = [f for f in sorted(glob.glob(os.path.join(args.root, "*.xml"))) if Path(f).name.startswith(args.prefix)][:: args.every]
     per_class = collections.Counter(); per_class_hit = collections.Counter()
     neg = neg_fp = 0
     rows = []
