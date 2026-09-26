@@ -1,0 +1,79 @@
+/* =========================================================
+   VIGIL dashboard components shared by the dark (base) and light
+   (theme.css) looks: operations overview strip, quick-start tiles,
+   all-clear summary, idle badge, theme toggle. Colours are defined
+   here so they work without theme.css; theme.css may override them.
+========================================================= */
+:root {
+    --teal:      #1F7A8C;
+    --gold:      #D9A441;
+    --console:   linear-gradient(120deg, #1B3446 0%, #22506A 55%, #1F7A8C 100%);
+    --ink-muted: #9AA8A0;
+    --green:     #6fbf73;
+}
+
+/* ---------- operations overview / quick start / all clear ---------- */
+.ops-strip {
+    display: grid; grid-template-columns: 1fr 1fr 2.2fr 1.4fr 1fr; gap: 14px;
+    background: var(--console); border-radius: var(--radius-lg); padding: 14px;
+    box-shadow: 0 10px 30px rgba(20, 45, 60, .30);
+}
+.ops-card {
+    background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: var(--radius-md); padding: 10px 14px; color: #EAF4F7; min-width: 0;
+}
+.ops-label { display: block; font-size: 10px; letter-spacing: 1.6px; color: #9FC9D4; margin-bottom: 4px; }
+.ops-card strong { display: block; font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
+.ops-card small { display: block; font-size: 11px; color: #B8D7DF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ops-bar { height: 5px; margin-top: 6px; border-radius: 99px; background: rgba(255, 255, 255, .15); overflow: hidden; }
+.ops-bar span { display: block; height: 100%; background: linear-gradient(90deg, #5FD39A, var(--gold)); transition: width .4s ease; }
+.ops-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-chip {
+    font-size: 11px; padding: 3px 9px; border-radius: 99px; color: #9FB5BE;
+    border: 1px solid rgba(255, 255, 255, .18); background: rgba(0, 0, 0, .12);
+}
+.ops-chip::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; background: #6B7F87; vertical-align: 1px; }
+.ops-chip.on { color: #fff; border-color: rgba(95, 211, 154, .55); background: rgba(95, 211, 154, .16); }
+.ops-chip.on::before { background: #5FD39A; }
+.ops-sev, .day-summary > div { display: flex; gap: 6px; }
+.sev { flex: 1; text-align: center; font-size: 9px; letter-spacing: 1px; padding: 4px 2px; border-radius: var(--radius-sm); color: #fff; }
+.sev b { display: block; font-size: 17px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.sev.c { background: rgba(185, 78, 61, .85); }
+.sev.h { background: rgba(208, 112, 42, .85); }
+.sev.m { background: rgba(41, 70, 90, .85); }
+.sev.l { background: rgba(49, 91, 72, .85); }
+
+.quick-start { display: grid; grid-template-columns: repeat(4, minmax(0, 150px)); gap: 12px; margin-top: 18px; justify-content: center; }
+.quick-start button {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px;
+    border-radius: var(--radius-md); cursor: pointer; color: #fff;
+    background: rgba(255, 255, 255, .08); border: 1px solid rgba(180, 208, 190, .35);
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.quick-start button:hover { background: rgba(31, 122, 140, .45); border-color: var(--gold); transform: translateY(-2px); }
+.quick-start b { font-size: 20px; color: var(--gold); }
+.quick-start span { font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+.quick-start small { font-size: 10px; color: #C9DDE3; }
+
+.empty-alerts h3 { color: var(--green); }
+.day-summary { margin: 16px auto 0; max-width: 260px; text-align: left; }
+.ds-title { display: block; font-size: 10px; letter-spacing: 1.6px; color: var(--ink-muted); margin-bottom: 6px; }
+
+@media (max-width: 1200px) {
+    .ops-strip { grid-template-columns: 1fr 1fr; }
+    .ops-wide { grid-column: 1 / -1; }
+    .quick-start { grid-template-columns: repeat(2, minmax(0, 160px)); }
+}
+
+.live-indicator.idle { background: rgba(120, 135, 145, .14); border-color: rgba(120, 135, 145, .45); color: #8A99A3; }
+.live-indicator.idle span:first-child { background: #9AA8B1; }
+
+
+/* theme toggle (top bar) */
+.theme-toggle {
+    display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; cursor: pointer;
+    font: inherit; font-size: 11px; letter-spacing: 1px; padding: 7px 12px; border-radius: 999px;
+    color: inherit; background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .28);
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, .2); }
+.topbar-right { display: flex; align-items: center; }

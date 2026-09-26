@@ -1633,8 +1633,13 @@ textarea:focus {
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet"
     >
-    <!-- Sage + navy + white theme (remove this line for the original dark theme) -->
-    <link rel="stylesheet" href="/static/theme.css">
+    <link rel="stylesheet" href="/static/components.css">
+    <!-- Light theme (sage + navy + white). The top-bar toggle switches it off for dark mode. -->
+    <link rel="stylesheet" href="/static/theme.css" id="lightTheme">
+    <script>
+        // Apply the saved choice before first paint, so the page never flashes the wrong theme.
+        try { if (localStorage.getItem("vigil-theme") === "dark") document.getElementById("lightTheme").disabled = true; } catch (e) {}
+    </script>
 </head>
 
 <body>
@@ -1658,10 +1663,13 @@ textarea:focus {
         </div>
     </div>
 
+    <div class="topbar-right">
+    <button type="button" class="theme-toggle" id="themeToggle" title="Switch between light and dark mode"></button>
     <div class="system-state">
         <span class="status-dot" id="systemDot"></span>
         <span id="systemOnline">CONNECTING...</span>
         <span class="system-time" id="clock">00:00:00</span>
+    </div>
     </div>
 
 </header>
@@ -5870,6 +5878,19 @@ function updateOps(status, cams, alertBatch) {
     const sev = document.querySelectorAll("#opsSev .sev b");
     ["CRITICAL", "HIGH", "MEDIUM", "LOW"].forEach((b, i) => { sev[i].textContent = hour.filter(a => a.band === b).length; });
 }
+
+// Light / dark mode: light = theme.css on, dark = the original base theme.
+function applyThemeLabel() {
+    const dark = document.getElementById("lightTheme").disabled;
+    document.getElementById("themeToggle").innerHTML = dark ? "&#9728; LIGHT MODE" : "&#9790; DARK MODE";
+}
+document.getElementById("themeToggle").addEventListener("click", () => {
+    const link = document.getElementById("lightTheme");
+    link.disabled = !link.disabled;
+    try { localStorage.setItem("vigil-theme", link.disabled ? "dark" : "light"); } catch (e) {}
+    applyThemeLabel();
+});
+applyThemeLabel();
 
 document.querySelectorAll(".quick-start button").forEach(btn => btn.addEventListener("click", () => {
     const action = btn.dataset.qs;
