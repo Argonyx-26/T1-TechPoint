@@ -171,3 +171,24 @@ def test_one_confident_sighting_alone_does_not_confirm():
     out = [wf.update(b, frame_size=(640, 480), confs=c) for b, c in
            [({"knife": (100, 100, 130, 200)}, {"knife": 0.8})] + [({}, {})] * 7]
     assert not any(out)
+
+
+def test_on_screen_box_does_not_jump_to_a_weak_hit_elsewhere():
+    # live capture: a confirmed gun's box moved onto empty snow via a weak (0.3) hit
+    class Seq:
+        enabled = True
+
+        def __init__(self, frames):
+            self.frames = iter(frames)
+
+        def infer(self, frame):
+            return next(self.frames)
+
+    gun = (160, 208, 180, 229)
+    snow = (60, 380, 110, 420)
+    frames = [[WeaponDetection("pistol", 0.8, gun)]] * 8 + [[WeaponDetection("pistol", 0.3, snow)]] * 3
+    pipe = FramePipeline(object_detector=_NoObjects(), weapon_detector=Seq(frames), alert_manager=_Alerts(), lazy=True)
+    img = np.zeros((480, 270, 3), np.uint8)
+    for _ in frames:
+        pipe.process(img)
+    assert pipe._weapon_display_state["pistol"]["last_bbox"] == gun

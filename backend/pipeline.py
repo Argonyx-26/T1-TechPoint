@@ -13,7 +13,7 @@ import numpy as np
 from backend import config
 from backend.alerts.manager import AlertManager
 from backend.analytics.rules import RuleEngine
-from backend.analytics.weapon_filter import WeaponTemporalFilter
+from backend.analytics.weapon_filter import WeaponTemporalFilter, _near
 from backend.analytics.weapon_verify import suppression_reason
 from backend.detection.object_detector import ObjectDetector
 from backend.detection.weapon_detector import WeaponDetection, WeaponDetector
@@ -57,6 +57,7 @@ class FramePipeline:
         # one dropped frame). Does NOT affect alert-firing logic below, which
         # still runs on raw per-frame weapon_detections + weapon_filter.
         self._weapon_display_state: Dict[str, dict] = {}
+        self._track_floor = 0.0
 
     def process(self, frame: np.ndarray) -> np.ndarray:
         timestamp = time.time()
@@ -108,6 +109,7 @@ class FramePipeline:
             {c: wd.bbox for c, wd in latest_by_class.items()}, frame_size=(width, height),
             confs={c: wd.conf for c, wd in latest_by_class.items()})) if weapon_evaluated else set()
 
+        self._track_floor = config.WEAPON_TRACK_MIN_FRAC * (width ** 2 + height ** 2) ** 0.5
         display_weapons = self._smooth_weapon_display(weapon_detections, confirmed_classes, timestamp)
 
         annotated = frame.copy()
@@ -170,6 +172,12 @@ class FramePipeline:
             already_acquired = wd.cls_name in self._weapon_display_state
             if not already_acquired and wd.cls_name not in confirmed_classes:
                 continue  # not yet confirmed by the temporal filter -- don't show it
+            if already_acquired and wd.conf < config.WEAPON_ALERT_MIN_CONF:
+                # A weak hit may only keep the box alive where the weapon is, not
+                # drag it onto some other object (seen: a box on empty snow).
+                last = self._weapon_display_state[wd.cls_name]["last_bbox"]
+                if not _near(wd.bbox, last, config.WEAPON_TRACK_DIST, self._track_floor):
+                    continue
             state = self._weapon_display_state.setdefault(
                 wd.cls_name, {"conf_history": deque(maxlen=config.WEAPON_CONF_SMOOTH_WINDOW)}
             )
