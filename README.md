@@ -197,7 +197,8 @@ auto-plays the first one found on startup if no webcam is available.
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open **`http://127.0.0.1:8000`** on the laptop, not `http://localhost:8000`:
+Open **`http://127.0.0.1:8000`** for the landing page, or go straight to the control room at
+**`http://127.0.0.1:8000/dashboard`**. Use `127.0.0.1`, not `http://localhost:8000`:
 Windows resolves `localhost` to IPv6 `::1` first, and every request then
 pays ~0.2 s falling back to IPv4.
 

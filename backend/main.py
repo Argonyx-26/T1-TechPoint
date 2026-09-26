@@ -52,6 +52,12 @@ app.include_router(locate_router)
 
 
 @app.get("/", response_class=HTMLResponse)
+def landing():
+    """Public landing page; its console buttons open /dashboard."""
+    return (FRONTEND_DIR / "landing.html").read_text(encoding="utf-8")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
 def index():
     return (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
 
